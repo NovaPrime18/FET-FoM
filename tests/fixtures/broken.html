@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>broken fixture</title></head>
+<body>
+<!-- Deliberately unbalanced: ENGINE BEGIN with no ENGINE END.  Used by
+     tests/markers.test.mjs to prove the extractor fails loudly rather than
+     returning an empty string and letting every other test pass vacuously. -->
+<script>
+/* ==== ENGINE BEGIN ==== */
+var FOMENGINE = { schemaVersion: 1 };
+</script>
+</body></html>

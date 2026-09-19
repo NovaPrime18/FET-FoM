@@ -1,0 +1,69 @@
+{
+ "source": "EPC AN030, Hard Switching Losses Calculation",
+ "url": "https://epc-co.com/epc/portals/0/epc/documents/application-notes/AN030%20Hard%20Switching%20Losses%20Calculation.pdf",
+ "why": "AN030 uses the same four-way split this engine implements and is applicable to both eGaN and Si MOSFETs. It is the external check on the switching terms, which the internal oracle cannot provide because both ports are transcribed from the same text.",
+ "statements": {
+  "overlap": "Overlap losses take place in Q1; Q2 does not have overlap losses. Current rise time from QGS2, voltage fall from QGD, gate current from (VDR - VPl)/RG.",
+  "coss": "For a symmetrical half-bridge the overall capacitive loss simplifies to Vbus * QOSS.",
+  "qrr": "Reverse recovery happens during the switch node positive voltage transition, where QRR is provided to Q2 from Vbus; losses are QRR*Vbus*fsw. GaN FETs do not have these losses.",
+  "gate": "PG = QG*VGS*fsw, dissipated in the gate loop resistors, so in most cases outside the device."
+ },
+ "case": {
+  "part": "EPC2361",
+  "Vbus": 48.0,
+  "I": 20.0,
+  "fsw": 100000.0,
+  "Vdrv": 5.0,
+  "Ron": 2.6,
+  "Roff": 0.6,
+  "topology": "buck",
+  "N": 1,
+  "RdsAt25C": true
+ },
+ "expected": {
+  "Qgs2": 2.5e-09,
+  "Qgd": 3.8e-09,
+  "Qsw": 6.3e-09,
+  "IgOn": 1.1153846153846154,
+  "IgOff": 3.5000000000000004,
+  "Eon_AN030": 2.7111724137931034e-06,
+  "Eoff_AN030_naive": 8.64e-07,
+  "Eifall_AN030": 3.428571428571428e-07,
+  "Evrise_AN030": 5.211428571428571e-07,
+  "Eoff_engine_tRiseV": 5.211428571428571e-07,
+  "Eoff_engine_kSoftOff_1p0": 5.211428571428571e-07,
+  "Eoff_engine_kSoftOff_0p22": 1.1465142857142856e-07,
+  "Eoverlap_AN030_naive": 3.575172413793103e-06,
+  "Eoverlap_engine_kSoftOff_1p0": 3.575172413793103e-06,
+  "Eoverlap_engine_kSoftOff_0p22": 3.1686809852216747e-06,
+  "Ecoss_AN030_VQoss": 4.232718275529332e-06,
+  "Eoss_at_Vbus": 1.4109060918431104e-06,
+  "coss_factor_VQoss_over_Eoss": 3.0000000000000004,
+  "coss_factor_Eoss_over_2Eoss": 0.5,
+  "Qrr_AN030_per_die": 7.2e-06,
+  "Pgate_AN030_per_position": 1.3999999999999998e-07
+ },
+ "deliberate_divergence": {
+  "turn_off": "The engine's turn-off is kSoftOff * 0.5*Vbus*I*min(Qgd/IgOff, Qoss/I), not AN030's (Qgs2+Qgd)/IgOff triangle. Source: motorDriveLoss.m, which anchors kSoftOff = 0.22 to EPC23102's measured EOFF/EON = 0.06.",
+  "asserted": "turn-on must match AN030 exactly; turn-off must match the soft-turn-off expression, and must remain strictly below AN030's naive value at kSoftOff = 0.22."
+ },
+ "engine_check": {
+  "Eon_plus_ifall_per_cycle": 3.0540295566502464e-06,
+  "Eon_plus_ifall_expected": 3.054029556650246e-06,
+  "overlap_kSoftOff_1p0_per_cycle": 3.575172413793103e-06,
+  "overlap_kSoftOff_1p0_expected": 3.575172413793103e-06,
+  "overlap_kSoftOff_1p0_AN030_naive": 3.575172413793103e-06,
+  "overlap_kSoftOff_0p22_per_cycle": 3.168680985221675e-06,
+  "overlap_kSoftOff_0p22_expected": 3.1686809852216747e-06,
+  "Eoff_soft_over_AN030_vrise": 1.0,
+  "coss_VQoss_per_cycle": 4.232718275529332e-06,
+  "coss_Eoss_per_cycle": 1.4109060918431104e-06,
+  "coss_2Eoss_per_cycle": 2.821812183686221e-06,
+  "qrr_GaN_per_cycle_per_leg": 0.0,
+  "qrr_Si_N1_per_cycle_per_leg": 7.2e-06,
+  "gate_per_cycle_per_position": 2.7999999999999997e-07,
+  "gate_expected_2QGVdrv": 2.7999999999999997e-07,
+  "die_excludes_gate": 1.4036690689322433,
+  "die_plus_gate_is_total": 1.4316690689322433
+ }
+}

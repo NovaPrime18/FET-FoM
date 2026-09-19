@@ -1,0 +1,93 @@
+{
+ "source": "EPC AN017, Fourth Generation eGaN FETs Widen the Performance Gap",
+ "url": "https://epc-co.com/epc/design-support/application-notes/an017-fourth-generation-egan-fets-widen-the-performance-gap",
+ "definition": {
+  "FOM_HS": "(QGD + QGS2) * RDS(on)",
+  "FOM_SS": "(QG + QOSS) * RDS(on)",
+  "note": "QGS2 in AN017 is the gate-source charge from threshold to the plateau, i.e. Qgs - Qg(th) in the .m files."
+ },
+ "rows": {
+  "EPC2361": {
+   "technology": "GaN",
+   "Rds_on_mOhm": 0.75,
+   "Qgs2_nC": 2.5,
+   "Qgd_nC": 3.8000000000000003,
+   "Qg_nC": 28.0,
+   "Qoss_nC": 90.0,
+   "FOM_HS_mOhm_nC": 4.7250000000000005,
+   "FOM_SS_mOhm_nC": 88.5
+  },
+  "EPC2218": {
+   "technology": "GaN",
+   "Rds_on_mOhm": 2.4,
+   "Qgs2_nC": 1.3,
+   "Qgd_nC": 1.5,
+   "Qg_nC": 10.5,
+   "Qoss_nC": 46.0,
+   "FOM_HS_mOhm_nC": 6.72,
+   "FOM_SS_mOhm_nC": 135.6
+  },
+  "EPC2252": {
+   "technology": "GaN",
+   "Rds_on_mOhm": 8.0,
+   "Qgs2_nC": 0.3000000000000001,
+   "Qgd_nC": 0.5,
+   "Qg_nC": 3.5,
+   "Qoss_nC": 14.999999999999998,
+   "FOM_HS_mOhm_nC": 6.400000000000001,
+   "FOM_SS_mOhm_nC": 148.0
+  },
+  "EPC2204": {
+   "technology": "GaN",
+   "Rds_on_mOhm": 4.4,
+   "Qgs2_nC": 0.7999999999999999,
+   "Qgd_nC": 0.8,
+   "Qg_nC": 5.7,
+   "Qoss_nC": 25.0,
+   "FOM_HS_mOhm_nC": 7.04,
+   "FOM_SS_mOhm_nC": 135.07999999999998
+  },
+  "EPC2044": {
+   "technology": "GaN",
+   "Rds_on_mOhm": 7.0,
+   "Qgs2_nC": 0.3,
+   "Qgd_nC": 0.5,
+   "Qg_nC": 4.3,
+   "Qoss_nC": 14.999999999999998,
+   "FOM_HS_mOhm_nC": 5.6000000000000005,
+   "FOM_SS_mOhm_nC": 135.09999999999997
+  },
+  "EPC2065": {
+   "technology": "GaN",
+   "Rds_on_mOhm": 2.7,
+   "Qgs2_nC": 0.6,
+   "Qgd_nC": 1.7,
+   "Qg_nC": 9.4,
+   "Qoss_nC": 33.0,
+   "FOM_HS_mOhm_nC": 6.21,
+   "FOM_SS_mOhm_nC": 114.47999999999999
+  },
+  "IRF7759": {
+   "technology": "Si",
+   "Rds_on_mOhm": 1.8,
+   "Qgs2_nC": 11.0,
+   "Qgd_nC": 62.0,
+   "Qg_nC": 200.0,
+   "Qoss_nC": 59.99999999999999,
+   "FOM_HS_mOhm_nC": 131.4,
+   "FOM_SS_mOhm_nC": 467.99999999999994
+  }
+ },
+ "direction": {
+  "FOM_HS_improvement_Si_over_GaN": 27.809523809523807,
+  "assert": "FOM_HS(IRF7759) / FOM_HS(EPC2361) must be >> 1 (GaN much better)"
+ },
+ "epc_published_context": {
+  "FOM_HS_reduction_vs_best_Si": {
+   "40V": 3.5,
+   "100V": 6.1,
+   "200V": 8.5
+  },
+  "caveat": "Recorded as context only, NOT asserted: EPC compares against best-in-class Si at the same voltage, while IRF7759 here is a 75 V / 1.8 mOhm part chosen as an available example."
+ }
+}

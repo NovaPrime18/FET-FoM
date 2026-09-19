@@ -1,0 +1,81 @@
+{
+ "source": "textbook CCM capacitor-current results, plus Parseval",
+ "generatedBy": "FET_FOM/reference/make_external.py",
+ "note": "Capacitor data in this repo is generic only (no datasheets are committed), so these anchor the MODEL, not a part.",
+ "pulsed": [
+  {
+   "name": "buck-48-12-100k",
+   "Vin": 48.0,
+   "Vout": 12.0,
+   "Pout": 240.0,
+   "fsw": 100000.0,
+   "C": 0.0001,
+   "node": "in",
+   "expected": {
+    "duty": 0.25,
+    "IL_avg": 20.0,
+    "Irms": 8.660254037844386,
+    "dvCap": 0.375
+   }
+  },
+  {
+   "name": "buck-24-18-250k",
+   "Vin": 24.0,
+   "Vout": 18.0,
+   "Pout": 100.0,
+   "fsw": 250000.0,
+   "C": 4.7e-05,
+   "node": "in",
+   "expected": {
+    "duty": 0.75,
+    "IL_avg": 5.555555555555555,
+    "Irms": 2.4056261216234405,
+    "dvCap": 0.08865248226950354
+   }
+  },
+  {
+   "name": "boost-25-55-200k",
+   "Vin": 25.0,
+   "Vout": 55.0,
+   "Pout": 110.0,
+   "fsw": 200000.0,
+   "C": 0.0001,
+   "node": "out",
+   "expected": {
+    "duty": 0.4545454545454546,
+    "IL_avg": 4.4,
+    "Irms": 2.1908902300206647,
+    "dvCap": 0.05454545454545455
+   }
+  },
+  {
+   "name": "boost-12-48-300k",
+   "Vin": 12.0,
+   "Vout": 48.0,
+   "Pout": 200.0,
+   "fsw": 300000.0,
+   "C": 0.00022,
+   "node": "out",
+   "expected": {
+    "duty": 0.25,
+    "IL_avg": 16.666666666666668,
+    "Irms": 7.216878364870322,
+    "dvCap": 0.04734848484848485
+   }
+  }
+ ],
+ "smooth": {
+  "dIL": 1.0,
+  "fsw": 100000.0,
+  "C": 0.0001,
+  "expected": {
+   "Irms": 0.2886751345948129,
+   "dvCap": 0.0125
+  }
+ },
+ "parseval": {
+  "dIL": 1.0,
+  "expected_sum_mean_square": 0.08333333333333333,
+  "why": "sum of the harmonic mean squares of a zero-mean triangle with peak-to-peak dI equals its mean square dI^2/12; Capacitor_Losses.m's 8*dI amplitude is 2x high and therefore 4x high in ESR loss."
+ }
+}

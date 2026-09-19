@@ -1,0 +1,54 @@
+{
+ "source": "closed form, plus a numerical resolution study",
+ "generatedBy": "FET_FOM/reference/make_external.py",
+ "note": "k = lamPPmax * fsw / Vdc is the L-free, dimensionless form of dI_pp = k * Vdc / (Ls * fsw).",
+ "anchors": [
+  {
+   "name": "svpwm-linear-limit",
+   "M": 1.1547005383792517,
+   "Vdc": 58.0,
+   "fsw": 25000.0,
+   "k_expected": 0.16666666666666666,
+   "k_measured": 0.16666666666666696,
+   "rel_error": 1.8318679906315083e-15,
+   "why": "The classic SVPWM linear-region maximum, dI_pp,max = Vdc/(6*Ls*fsw), attained at the linear limit M = 2/sqrt(3)."
+  },
+  {
+   "name": "svpwm-M1",
+   "M": 1.0,
+   "Vdc": 58.0,
+   "fsw": 25000.0,
+   "k_expected": 0.14433756729740646,
+   "k_measured": 0.14433756729740674,
+   "rel_error": 1.9229626863835637e-15,
+   "why": "A second exact datum at M = 1, where the same normalised constant is 1/(4*sqrt(3)).  Not the classic quote, but it pins the shape of the ripple-versus-M curve rather than one endpoint of it."
+  }
+ ],
+ "resolution": {
+  "nSub": [
+   48,
+   96,
+   192,
+   384,
+   768
+  ],
+  "lamPPmax": [
+   0.0003348631561299828,
+   0.00033486315612998234,
+   0.0003348631561299836,
+   0.0003348631561299827,
+   0.00033486315612998516
+  ],
+  "Vrms": [
+   13.487181288442633,
+   13.772889252508346,
+   13.922950225168089,
+   14.006891232153093,
+   14.02799127706919
+  ],
+  "Vrms_extrapolated": 14.049091321985289,
+  "lamPPmax_spread": 8.418142148096096e-15,
+  "Vrms_at_default_192_rel": -0.00897859469528845,
+  "why": "lamPPmax is a peak-to-peak flux, so it is resolution independent (spread ~ 0); Vrms is a mean square over binned pulse widths and converges as O(1/nSub)."
+ }
+}

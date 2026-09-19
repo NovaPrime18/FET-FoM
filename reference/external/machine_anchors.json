@@ -1,0 +1,86 @@
+{
+ "source": "lehner7050Params.m calibration rows + analytic AC-factor limits",
+ "generatedBy": "FET_FOM/reference/make_external.py",
+ "note": "kh and ke are DERIVED from these two dyno rows, so reproducing them checks the calibration and its port, not the dyno data.  The AC factor limits are analytic.",
+ "derived": {
+  "p": 10,
+  "lam": 0.00301,
+  "Rph": 0.0091,
+  "Ls": 7.45e-06,
+  "cabLen": 2.0,
+  "cabArea": 1.6e-05,
+  "Rfix": 0.0012,
+  "fracIron": 0.95,
+  "beta": 2.0,
+  "kLm": 0.65,
+  "dLam": 0.0002,
+  "rhoLam": 5e-07,
+  "muRLam": 500,
+  "dStrand": 0.001,
+  "mLayers": 4,
+  "poros": 0.8,
+  "Rcable": 0.00215,
+  "cabDia": 0.00451351666838205,
+  "Rwind": 0.005750000000000001,
+  "KtPk": 0.04515,
+  "Ke": 0.307737155348815,
+  "Kh": 1349.4433516034744,
+  "alphaEquiv": 1.622039034932764,
+  "ironSplit": [
+   0.33258824104708967,
+   0.6674117589529104
+  ]
+ },
+ "cal": [
+  {
+   "name": "7050-9",
+   "f": 1783.1666666666665,
+   "dyno": 262.2,
+   "model": 262.1779797435372,
+   "rel_error": -8.39826714827657e-05,
+   "lamEddyFactor": 0.9998741666289872
+  },
+  {
+   "name": "7050-12",
+   "f": 1203.1666666666665,
+   "dyno": 138.51,
+   "model": 138.50543537450224,
+   "rel_error": -3.295520538408657e-05,
+   "lamEddyFactor": 0.9999427057680632
+  }
+ ],
+ "factors": {
+  "skinFr_dc": 1.000000028468301,
+  "skin": [
+   {
+    "f": 50.0,
+    "Fr": 1.0000711667026838,
+    "asymptote": 0.12088034932902043,
+    "difference": 0.8791908173736633
+   },
+   {
+    "f": 40000.0,
+    "Fr": 3.6824798863461488,
+    "asymptote": 3.4190125889099634,
+    "difference": 0.26346729743618535
+   },
+   {
+    "f": 60000.0,
+    "Fr": 4.448483467604486,
+    "asymptote": 4.187418133490756,
+    "difference": 0.2610653341137299
+   },
+   {
+    "f": 300000.0,
+    "Fr": 9.618347541574076,
+    "asymptote": 9.363351596700621,
+    "difference": 0.2549959448734551
+   }
+  ],
+  "skin_series_valid_through_Hz": 400000.0,
+  "dowellFr_dc": 1.00000003634295,
+  "dowellFr_60k": 34.83608880980804,
+  "lamEddyFactor_small_xi": 0.9999999999625645,
+  "lamEddyFactor_xi_times_F": 3.0
+ }
+}

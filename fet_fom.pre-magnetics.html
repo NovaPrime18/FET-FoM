@@ -1,0 +1,1893 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FET Switching-Loss &amp; FOM Calculator</title>
+<style>
+/* ============================== design tokens ============================ */
+:root{
+  color-scheme:dark;
+  /* surfaces: a cool near-black ramp, each step one notch of elevation */
+  --bg:#0d1116; --panel:#151b22; --panel2:#1a222b; --panel3:#222c38;
+  --inset:#0d1319; --line:#29323d; --line2:#1f2833;
+  /* text */
+  --fg:#e8eef5; --mut:#8fa1b3; --faint:#6e8199;
+  /* accents */
+  --acc:#4aa3ff; --gan:#3ddc84; --si:#ffb454;
+  --bad:#ff6b6b; --warn:#ffd166; --good:#3ddc84;
+  /* One colour per device, used for bars, chart traces, the topology picture
+     and the winner tag alike -- no second colour system for "better". */
+  --a:#4aa3ff; --b:#ff9f43;
+  --a-soft:rgba(74,163,255,.14); --b-soft:rgba(255,159,67,.15);
+  --good-soft:rgba(61,220,132,.12); --bad-soft:rgba(255,107,107,.11); --warn-soft:rgba(255,209,102,.11);
+  --mono:ui-monospace,"SF Mono","Cascadia Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --r:10px; --r-sm:7px; --t:.16s ease;
+}
+*{box-sizing:border-box;scrollbar-width:thin;scrollbar-color:#28313d transparent}
+html,body{margin:0;height:100%}
+body{
+  /* faint engine-room glow: blue over the schematic, green over the inputs */
+  background:
+    radial-gradient(1100px 520px at 62% -220px,rgba(74,163,255,.06),transparent 65%),
+    radial-gradient(900px 460px at 6% -160px,rgba(61,220,132,.035),transparent 60%),
+    var(--bg);
+  color:var(--fg);
+  font:14px/1.55 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+}
+::selection{background:rgba(74,163,255,.30)}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#28313d;border-radius:6px;border:2px solid var(--bg)}
+::-webkit-scrollbar-thumb:hover{background:#39455a}
+/* ================================ header ================================= */
+header{
+  position:sticky;top:0;z-index:60;
+  padding:10px 18px;border-bottom:1px solid var(--line);
+  display:flex;gap:14px;align-items:center;flex-wrap:wrap;max-width:1640px;margin:0 auto;
+  background:rgba(13,17,22,.85);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+}
+.brand{display:flex;align-items:center;gap:11px;min-width:0}
+.logo{flex:0 0 auto;display:block;width:30px;height:30px}
+.logo .lo-bg{fill:#11161d;stroke:#2b3541;stroke-width:1.2}
+.logo .lo-hs{fill:rgba(74,163,255,.16);stroke:var(--a);stroke-width:1.4}
+.logo .lo-ls{fill:rgba(255,159,67,.16);stroke:var(--b);stroke-width:1.4}
+.logo .lo-w{fill:none;stroke:#5d718c;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+header h1{font-size:15.5px;margin:0;font-weight:700;letter-spacing:-.005em;line-height:1.25}
+header .sub{display:block;color:var(--mut);font-size:11.5px;margin-top:1px}
+.hspace{flex:1}
+header .chip{
+  display:inline-flex;align-items:center;gap:8px;font-size:11px;font-family:var(--mono);
+  color:var(--mut);background:var(--panel2);border:1px solid var(--line);
+  border-radius:99px;padding:5px 12px;white-space:nowrap;
+}
+header .chip::before{content:"";width:6px;height:6px;border-radius:50%;
+  background:var(--good);box-shadow:0 0 8px rgba(61,220,132,.7)}
+/* ================================ layout ================================= */
+main{display:grid;grid-template-columns:320px minmax(440px,1fr) 360px;gap:14px;padding:16px 14px 26px;max-width:1640px;margin:0 auto;align-items:start}
+/* minmax(0,1fr): a plain 1fr track takes its item's min-content as the auto
+   minimum, so one wide chart stretched the whole column past the viewport on
+   narrow screens.  Zero the minimum; the charts can shrink, the tables scroll. */
+@media(max-width:1320px){main{grid-template-columns:minmax(0,1fr)}}
+section.panel{
+  background:linear-gradient(180deg,#171d25 0%,#141a21 100%);
+  border:1px solid var(--line);border-radius:var(--r);
+  padding:13px 16px 15px;margin-bottom:14px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.025),0 12px 32px rgba(0,0,0,.22);
+}
+section.panel>h2{
+  font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--faint);
+  margin:0 0 12px;font-weight:700;display:flex;align-items:center;gap:8px;
+}
+section.panel>h2::before{content:"";width:3px;height:11px;border-radius:2px;
+  background:var(--acc);box-shadow:0 0 8px rgba(74,163,255,.5)}
+/* ============================== form controls ============================ */
+label{display:block;margin:9px 0 4px;color:var(--mut);font-size:12px}
+input,select,textarea{
+  font:inherit;font-size:13.5px;color:var(--fg);background:var(--inset);
+  border:1px solid var(--line);border-radius:var(--r-sm);padding:6px 9px;width:100%;
+  font-variant-numeric:tabular-nums;
+  transition:border-color var(--t),box-shadow var(--t),background var(--t);
+}
+input:hover,select:hover,textarea:hover{border-color:#3a475a}
+input:focus,select:focus,textarea:focus{
+  outline:none;border-color:var(--acc);background:#0e141b;box-shadow:0 0 0 3px var(--a-soft);
+}
+input::placeholder{color:var(--faint)}
+input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+input[type=number]{appearance:textfield;-moz-appearance:textfield}
+select{
+  appearance:none;-webkit-appearance:none;cursor:pointer;padding-right:30px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238fa1b3' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 10px center;
+}
+select option{background:#161d24;color:var(--fg)}
+textarea{font-family:var(--mono);font-size:12px;line-height:1.5}
+button{
+  cursor:pointer;width:auto;font:inherit;font-size:13px;font-weight:550;color:var(--fg);
+  background:linear-gradient(180deg,#242e3a,#1b232d);border:1px solid var(--line);
+  border-radius:var(--r-sm);padding:6px 12px;
+  transition:border-color var(--t),background var(--t),box-shadow var(--t),transform .08s ease;
+}
+button:hover{border-color:#405f87;background:linear-gradient(180deg,#2a3542,#202a35)}
+button:active{transform:translateY(1px)}
+button.primary{
+  background:linear-gradient(180deg,#57b0ff,#3c90e6);border-color:#2f7cd9;color:#071119;font-weight:650;
+  box-shadow:0 2px 10px rgba(74,163,255,.28);
+}
+button.primary:hover{background:linear-gradient(180deg,#66b9ff,#4a9cf0);border-color:#4a9cf0}
+button.tog{font-size:12px;padding:5px 12px;border-radius:99px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+/* --- parameter groups: the sidebar was one monolithic list --- */
+.fgroup{border-top:1px solid var(--line2);padding-top:10px;margin-top:14px}
+.fgroup:first-of-type{border-top:0;padding-top:0;margin-top:0}
+.fgroup>h3{
+  font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--acc);margin:0 0 4px;font-weight:700;
+  display:flex;align-items:center;gap:8px;
+}
+.fgroup>h3::after{content:"";flex:1;height:1px;background:var(--line2)}
+/* --- hero: topology picture + primary KPIs --- */
+/* stretch, not center: the schematic box and the KPI panel share one row height */
+.hero{display:grid;grid-template-columns:minmax(230px,330px) 1fr;gap:14px;align-items:stretch}
+@media(max-width:980px){.hero{grid-template-columns:1fr}}
+.topo{
+  background:linear-gradient(180deg,#161d26,#121821);border:1px solid var(--line);
+  border-radius:var(--r-sm);padding:6px;display:flex;flex-direction:column;justify-content:center;overflow:hidden;
+}
+/* Capped at 420px so the drawing keeps schematic proportions when the hero
+   stacks on narrow screens instead of ballooning to full column width. */
+.topo svg{flex:1 1 auto;min-height:0;width:100%;max-width:420px;height:100%;margin:0 auto}
+#kpis{display:flex;flex-wrap:wrap;gap:10px;align-content:center}
+.kpi{
+  flex:1 1 132px;min-width:0;background:linear-gradient(180deg,#1b242f,#161d26);
+  border:1px solid var(--line);border-radius:8px;padding:10px 12px;
+  transition:border-color var(--t),box-shadow var(--t);
+}
+.kpi:hover{border-color:#39485e}
+.kpi.win{border-color:rgba(61,220,132,.5);box-shadow:0 0 0 1px rgba(61,220,132,.15),0 0 22px rgba(61,220,132,.09)}
+/* Two metrics that are read together (the two verdicts, the two loss-context
+   numbers) share one slot as two side-by-side bubbles.  A pair is ordered first
+   in each case, and flex:2 1 210px lets it take about two single-card widths
+   when there is room and shrink (not overflow) when there is not.  Keeping the
+   pair to one slot is what drops the strip from three rows to two at the
+   centre-column width; letting it span two slots would not. */
+.kpi.pair{flex:2 1 210px;display:grid;grid-template-columns:1fr 1fr;gap:8px;background:none;border:0;padding:0}
+.kpi.pair>.bub{
+  min-width:0;background:linear-gradient(180deg,#1b242f,#161d26);border:1px solid var(--line);
+  border-radius:8px;padding:9px 11px;transition:border-color var(--t),box-shadow var(--t);
+}
+.kpi.pair>.bub:hover{border-color:#39485e}
+.kpi.pair>.bub.win{border-color:rgba(61,220,132,.5);box-shadow:0 0 0 1px rgba(61,220,132,.15),0 0 22px rgba(61,220,132,.09)}
+.kpi .v{font-size:21px;font-weight:650;line-height:1.15;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.kpi .v.sm{font-size:16.5px}
+.kpi.pair .v{font-size:15.5px}
+.kpi .l{font-size:10px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;margin-top:4px;font-weight:600}
+.kpi .s{font-size:11.5px;color:var(--mut);margin-top:3px}
+.ca{color:var(--a)} .cb{color:var(--b)}
+/* ================================ tables ================================= */
+table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+th,td{padding:7px 10px;text-align:right;border-bottom:1px solid var(--line2);white-space:nowrap;line-height:1.45;vertical-align:middle}
+th:first-child,td:first-child{text-align:left;white-space:normal}
+th{color:var(--mut);font-weight:600;font-size:11px;letter-spacing:.02em;border-bottom:1px solid var(--line)}
+tbody tr:hover>td{background:rgba(74,163,255,.04)}
+tr.tot td{font-weight:650;border-top:1px solid var(--acc);background:rgba(74,163,255,.045)}
+td.winA{color:var(--a);font-weight:600}
+td.winB{color:var(--b);font-weight:600}
+td.num{text-align:right}
+.wchip{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;letter-spacing:.03em;
+  padding:1px 7px;border-radius:99px;border:1px solid}
+td.winA .wchip{color:var(--a);background:var(--a-soft);border-color:rgba(74,163,255,.45)}
+td.winB .wchip{color:var(--b);background:var(--b-soft);border-color:rgba(255,159,67,.45)}
+.devdot{display:inline-block;width:7px;height:7px;border-radius:2px;margin-right:6px;background:var(--mut)}
+.devdot.a{background:var(--a)} .devdot.b{background:var(--b)}
+/* Fixed-width track, bar anchored at 0, number in its own column.  The bar can
+   never run under the numeral, and lengths are comparable down the column. */
+td.track{width:118px;padding-left:2px}
+.track-bg{display:block;width:110px;height:9px;background:#0b0f14;border:1px solid #232c37;border-radius:5px;overflow:hidden}
+.track-bg>span{display:block;height:100%;background:var(--a);border-radius:4px 0 0 4px}
+.track-bg>span.b{background:var(--b)}
+.tscroll{overflow-x:auto}
+.tbl-h{font-size:13px;font-weight:650;margin:26px 0 10px;padding-top:18px;border-top:1px solid var(--line)}
+.tbl-h:first-child{border-top:0;padding-top:0;margin-top:2px}
+.tbl-h .n{color:var(--faint);font-weight:400;font-size:12px;margin-left:4px}
+.subhead{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);font-weight:700;margin:22px 0 8px}
+/* --- info affordance for the density that moved into tooltips --- */
+span.info{display:inline-flex;width:14px;height:14px;border-radius:50%;border:1px solid #3c4a5c;color:var(--faint);
+      font-size:9.5px;line-height:1;align-items:center;justify-content:center;cursor:help;vertical-align:-2px;font-style:normal;flex:0 0 auto;
+      transition:color var(--t),border-color var(--t),background var(--t)}
+span.info:hover{border-color:var(--acc);color:var(--acc);background:var(--a-soft)}
+/* a dotted underline is the quiet way to say "hover me" -- no icon clutter */
+/* Portal tooltip layer.  Native `title` tooltips cannot be sized, wrapped or
+   positioned, so a long one is clipped into a stub floating wherever the cursor
+   happens to be.  This is fixed-position, above everything, and never in flow. */
+#tip{position:fixed;left:0;top:0;z-index:9999;pointer-events:none;max-width:340px;
+     background:#0c1016;color:var(--fg);border:1px solid #36445c;border-radius:8px;
+     padding:10px 12px;font-size:12px;line-height:1.55;white-space:pre-line;
+     box-shadow:0 16px 44px rgba(0,0,0,.55),0 3px 10px rgba(0,0,0,.35);
+     opacity:0;visibility:hidden;transform:translateY(3px);
+     transition:opacity .13s ease,transform .13s ease,visibility .13s}
+#tip.on{opacity:1;visibility:visible;transform:translateY(0)}
+.has-tip{border-bottom:1px dotted #4c5c70;cursor:help}
+.has-tip:hover{border-bottom-color:var(--acc)}
+/* ============================ warnings =================================== */
+.bad{color:var(--bad)}
+.good{color:var(--good)}
+.warnbox{font-size:12.5px}
+.wcard{border:1px solid var(--line);border-left:3px solid var(--mut);border-radius:var(--r-sm);
+  padding:10px 12px;margin:10px 0;background:var(--panel2)}
+.wcard.sev-critical{border-left-color:var(--bad);background:linear-gradient(180deg,rgba(255,107,107,.07),rgba(255,107,107,.02)),var(--panel2)}
+.wcard.sev-caution{border-left-color:var(--warn);background:linear-gradient(180deg,rgba(255,209,102,.07),rgba(255,209,102,.02)),var(--panel2)}
+.wcard.sev-info{border-left-color:var(--acc);background:linear-gradient(180deg,rgba(74,163,255,.07),rgba(74,163,255,.02)),var(--panel2)}
+.whead{display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap}
+.wico{display:inline-flex;width:18px;height:18px;border-radius:5px;align-items:center;justify-content:center;
+  font-size:11px;line-height:1;flex:0 0 auto}
+.wcard.sev-critical .wico{color:var(--bad);background:var(--bad-soft)}
+.wcard.sev-caution .wico{color:var(--warn);background:var(--warn-soft)}
+.wcard.sev-info .wico{color:var(--acc);background:var(--a-soft)}
+.wdev{font-family:var(--mono);font-size:9.5px;font-weight:700;color:#08111c;background:var(--mut);border-radius:4px;padding:1px 5px;letter-spacing:.04em}
+.wdev.both{background:var(--acc)}
+.wtitle{font-weight:650;font-size:12.5px}
+.wcard.sev-critical .wtitle{color:var(--bad)}
+.wcard.sev-caution .wtitle{color:var(--warn)}
+.wbody{font-size:12px;color:var(--mut);line-height:1.55}
+.allok{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--good);
+  background:var(--good-soft);border:1px solid rgba(61,220,132,.35);border-radius:var(--r-sm);padding:9px 12px}
+.allok .ok{display:inline-flex;width:18px;height:18px;border-radius:50%;align-items:center;justify-content:center;
+  background:rgba(61,220,132,.18);font-size:11px;font-weight:700;flex:0 0 auto}
+/* ============================ readouts =================================== */
+.readout{font-size:12px;color:var(--fg);margin-top:8px;min-height:19px}
+.readout b{color:var(--acc)}
+.mut{color:var(--mut)}
+.tag{display:inline-block;font-size:10px;font-weight:600;padding:1px 7px;border-radius:99px;border:1px solid #3a4757;color:var(--mut);background:rgba(255,255,255,.02)}
+.tag.gan{color:var(--gan);border-color:rgba(61,220,132,.45);background:var(--good-soft)}
+.tag.si{color:var(--si);border-color:rgba(255,180,84,.45);background:rgba(255,180,84,.1)}
+.tag.est{color:var(--warn);border-color:rgba(255,209,102,.45);background:var(--warn-soft)}
+/* ============================== charts =================================== */
+/* --- charts: capped so they stop ballooning on wide desktops --- */
+svg{display:block;width:100%;max-width:720px;height:auto;background:transparent;margin:0 auto}
+.legend{font-size:12px;color:var(--mut);display:flex;gap:16px;flex-wrap:wrap;margin:8px 0}
+.swatch{display:inline-block;width:14px;height:4px;vertical-align:middle;margin-right:6px;border-radius:2px}
+.plottools{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mut);margin-bottom:8px}
+.plottools label{display:inline-flex;align-items:center;gap:7px;margin:0;width:auto;color:var(--mut);
+  border:1px solid var(--line);border-radius:99px;padding:4px 11px;background:var(--panel2);cursor:pointer;
+  transition:border-color var(--t),color var(--t)}
+.plottools label:hover{border-color:#405f87;color:var(--fg)}
+.plottools input[type=checkbox]{width:13px;height:13px;margin:0;accent-color:var(--acc)}
+details{margin:8px 0}
+details summary{cursor:pointer;color:var(--mut);font-size:12px;margin:6px 0;list-style:none;
+  display:flex;align-items:center;gap:7px;user-select:none;transition:color var(--t)}
+details summary::-webkit-details-marker{display:none}
+details summary::before{content:"";width:0;height:0;border-left:5px solid var(--faint);
+  border-top:4px solid transparent;border-bottom:4px solid transparent;transition:transform var(--t)}
+details[open]>summary::before{transform:rotate(90deg)}
+details summary:hover{color:var(--fg)}
+.partrow{display:flex;gap:6px;align-items:center;margin:5px 0}
+.partrow select{flex:1}
+.hint{font-size:12px;color:var(--mut);margin-top:7px;line-height:1.55}
+.k{color:var(--mut)}
+@media(max-width:640px){
+  main{padding:10px}
+  section.panel{padding:12px 12px 14px}
+}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <svg class="logo" width="30" height="30" viewBox="0 0 30 30" aria-hidden="true">
+      <rect class="lo-bg" x="1" y="1" width="28" height="28" rx="8"></rect>
+      <rect class="lo-hs" x="4.5" y="4.5" width="9" height="8" rx="2.5"></rect>
+      <path class="lo-w" d="M9 12.5 V15.5 H21 V17.5"></path>
+      <rect class="lo-ls" x="16.5" y="17.5" width="9" height="8" rx="2.5"></rect>
+    </svg>
+    <div>
+      <h1>FET Switching-Loss &amp; FOM Calculator</h1>
+      <span class="sub">Offline losses calculator &middot; EPC AN030 method</span>
+    </div>
+  </div>
+  <span class="hspace"></span>
+  <span class="sub chip" id="hdrstat"></span>
+</header>
+<main>
+  <div>
+    <section class="panel"><h2>Application</h2><div id="form"></div></section>
+    <section class="panel"><h2>Advanced &mdash; estimates</h2><div id="adv"></div></section>
+  </div>
+  <div>
+    <section class="panel"><div class="hero"><div class="topo" id="topodiagram"></div><div id="kpis"></div></div></section>
+    <section class="panel"><h2>Loss breakdown &amp; A/B comparison</h2><div id="results">loading&hellip;</div></section>
+    <section class="panel"><h2>Loss vs switching frequency</h2><div id="plottools"></div><div id="plotfsw"></div></section>
+    <section class="panel"><h2>Loss vs parallel count N</h2><div id="plotn"></div>
+      <div class="subhead">Junction temperature vs N</div><div id="plottj"></div></section>
+    <section class="panel"><h2>Whole-bridge FET loss: N &times; f<sub>sw</sub> map</h2><div id="heat"></div><div class="readout" id="heatread"></div><div class="hint" id="heathint"></div></section>
+  </div>
+  <div>
+    <section class="panel"><h2>Devices</h2><div id="devs"></div></section>
+    <section class="panel"><h2>Warnings</h2><div id="warns" class="warnbox"></div></section>
+    <section class="panel"><h2>Part library &mdash; schemaVersion 1</h2><div id="lib"></div></section>
+  </div>
+</main>
+<div id="tip" role="tooltip" aria-hidden="true"></div>
+<script>
+/* ==== ENGINE BEGIN ==== */
+(function (root) {
+"use strict";
+
+var SQRT2 = Math.sqrt(2), PI = Math.PI, TOPOLOGIES = ["threephase","buck","boost","fourswitch"];
+
+/* ------------------------------------------------------------------ parts
+ * PER-DIE / PER-IC raw values, exactly as the Switching_Losses/*.m
+ * constructors hold them BEFORE the MOSparallel scaling those constructors
+ * apply.  'est' lists fields that are ESTIMATES, not datasheet values.
+ * ------------------------------------------------------------------------ */
+/* ==== PARTS BEGIN ==== */
+var PARTS = {
+EPC2361:{PN:"EPC2361",vendor:"EPC",technology:"GaN",kind:"discrete",Rdson25:0.00075,RdsonMax:null,IdcRating:101,BVdss:100,VgsRec:5,kTperC:0.006,Vth:1.1,Vpt:2.1,Qg:2.8e-8,Qgd:3.8e-9,Qgs:8.5e-9,Qgth:6e-9,Qoss:9e-8,QossVref:50,qossExp:0.5,Qrr:0,qrrExp:0,CSI:5e-11,Isd:[50,100],Vsd:[2.15,2.37],Vsd0:null,Eoss:null,EossVref:null,tsw:null,eiRef:null,eiVref:null,Qdrv:null,Iq:null,Vcc:null,RthJC:2,RthCA:10,RthSink:0,tauDead:4e-8,est:["kTperC","RthJC","RthCA"],notes:"per-die values from EPC2361.m; datasheet-checked against EPC2361_datasheet.pdf (Rds(on), Qg, Qgs, Qgd, Qg(th), Qoss, Qrr)"},
+EPC2367:{PN:"EPC2367",vendor:"EPC",technology:"GaN",kind:"discrete",Rdson25:0.0012,RdsonMax:null,IdcRating:101,BVdss:100,VgsRec:5,kTperC:0.006,Vth:1.1,Vpt:2.1,Qg:1.7e-8,Qgd:2.4e-9,Qgs:5.3e-9,Qgth:3.8e-9,Qoss:5.4e-8,QossVref:50,qossExp:0.5,Qrr:0,qrrExp:0,CSI:5e-11,Isd:null,Vsd:null,Vsd0:1.4,Eoss:null,EossVref:null,tsw:null,eiRef:null,eiVref:null,Qdrv:null,Iq:null,Vcc:null,RthJC:0.5,RthCA:26.6,RthSink:0,tauDead:4e-8,est:["CSI","RthCA","Vpt","kTperC"],notes:"EPC2367 eGaN FET, 100 V, 1.2 mOhm typ in a 3.3 x 3.3 mm QFN. Datasheet revised 2026-06-12: Rds(on) 1.2 mOhm typ / 1.5 max (VGS=5 V, ID=30 A), Qg 17 nC / Qgs 5.3 nC / Qgd 2.4 nC / Qg(th) 3.8 nC, Qoss 54 nC typ (63 max) at 50 V, Qrr 0, Vth 1.1 V, VSD 1.4 V at IS=0.5 A, BVDSS 100 V, ID 101 A, RthJC(top) 0.5 K/W with RthJB 2.4, RthJA_EVB 29, RthJA_JEDEC 50, TjMax 150 C. ESTIMATES (no datasheet row): Vpt 2.1 V from the EPC GaN family, kTperC is the GaN default, CSI is the 3.3x3.3-package default, and RthCA = RthJA_EVB 29 - RthJB 2.4. The datasheet publishes one VSD point only, so dead time uses it as a scalar drop."},
+EPC2304:{PN:"EPC2304",vendor:"EPC",technology:"GaN",kind:"discrete",Rdson25:0.0035,RdsonMax:null,IdcRating:133,BVdss:200,VgsRec:5,kTperC:0.006,Vth:1.5,Vpt:2.1,Qg:2.1e-8,Qgd:2e-9,Qgs:7.5e-9,Qgth:5.2e-9,Qoss:1.2e-7,QossVref:100,qossExp:0.5,Qrr:0,qrrExp:0,CSI:5e-11,Isd:null,Vsd:null,Vsd0:1.8,Eoss:null,EossVref:null,tsw:null,eiRef:null,eiVref:null,Qdrv:null,Iq:null,Vcc:null,RthJC:0.2,RthCA:19.5,RthSink:0,tauDead:4e-8,est:["CSI","RthCA","Vpt","kTperC"],notes:"EPC2304 eGaN FET, 200 V, 3.5 mOhm typ / 5 max in a top-side-cooled 3 x 5 mm PQFN. Datasheet revised 2026-06-19: Rds(on) 3.5 mOhm typ / 5 max (VGS=5 V, ID=30 A), Qg 21 nC typ / 26 max, Qgs 7.5 nC, Qgd 2 nC, Qg(th) 5.2 nC, Qoss 120 nC typ (145 max) at VDS=100 V, Qrr 0, Vth 1.5 V, VSD 1.8 V at IS=0.5 A, BVDSS 200 V, ID 133 A (TJ <= 125 C), RthJC(top) 0.2 K/W with RthJB 1.5, RthJA_EVB 21, RthJA_JEDEC 45, TjMax 150 C. ESTIMATES (no datasheet row): Vpt 2.1 V from the EPC GaN family, kTperC is the GaN default, CSI is the PQFN-package default (EPC2367's convention), and RthCA = RthJA_EVB 21 - RthJB 1.5. The datasheet publishes one VSD point only, so dead time uses it as a scalar drop."},
+EPC2305:{PN:"EPC2305",vendor:"EPC",technology:"GaN",kind:"discrete",Rdson25:0.0022,RdsonMax:null,IdcRating:133,BVdss:150,VgsRec:5,kTperC:0.006,Vth:1.1,Vpt:2.1,Qg:2.2e-8,Qgd:2.1e-9,Qgs:6.6e-9,Qgth:4.6e-9,Qoss:1.03e-7,QossVref:75,qossExp:0.5,Qrr:0,qrrExp:0,CSI:5e-11,Isd:null,Vsd:null,Vsd0:1.4,Eoss:null,EossVref:null,tsw:null,eiRef:null,eiVref:null,Qdrv:null,Iq:null,Vcc:null,RthJC:0.2,RthCA:19.5,RthSink:0,tauDead:4e-8,est:["CSI","RthCA","Vpt","kTperC"],notes:"EPC2305 eGaN FET, 150 V, 2.2 mOhm typ / 3.0 max in a top-side-cooled 3 x 5 mm PQFN 'Thermal-Max'. Datasheet revised 2026-06-12: Rds(on) 2.2 mOhm typ / 3.0 max (VGS=5 V, ID=30 A), Qg 22 nC typ / 28.6 max, Qgs 6.6 nC, Qgd 2.1 nC, Qg(th) 4.6 nC, Qoss 103 nC typ (116 max) at VDS=75 V, Qrr 0, Vth 1.1 V, VSD 1.4 V at IS=0.5 A, BVDSS 150 V, ID 133 A (TJ <= 125 C), RthJC(top) 0.2 K/W with RthJB 1.5, RthJA_EVB 21, RthJA_JEDEC 45, TjMax 150 C. ESTIMATES (no datasheet row): Vpt 2.1 V from the EPC GaN family, kTperC is the GaN default, CSI is the PQFN-package default (EPC2367's convention), and RthCA = RthJA_EVB 21 - RthJB 1.5. The datasheet publishes one VSD point only, so dead time uses it as a scalar drop."},
+EPC2218:{PN:"EPC2218",vendor:"EPC",technology:"GaN",kind:"discrete",Rdson25:0.0024,RdsonMax:null,IdcRating:60,BVdss:100,VgsRec:5,kTperC:0.006,Vth:1.1,Vpt:2.1,Qg:1.05e-8,Qgd:1.5e-9,Qgs:3.2e-9,Qgth:1.9e-9,Qoss:4.6e-8,QossVref:50,qossExp:0.5,Qrr:0,qrrExp:0,CSI:3e-10,Isd:[50,100],Vsd:[2.3,2.65],Vsd0:null,Eoss:null,EossVref:null,tsw:null,eiRef:null,eiVref:null,Qdrv:null,Iq:null,Vcc:null,RthJC:2,RthCA:10,RthSink:0,tauDead:4e-8,est:["kTperC","RthJC","RthCA"],notes:"per-die values from EPC2218.m"},
+EPC2252:{PN:"EPC2252",vendor:"EPC",technology:"GaN",kind:"discrete",Rdson25:0.008,RdsonMax:null,IdcRating:null,BVdss:100,VgsRec:5,kTperC:0.006,Vth:1.2,Vpt:2.1,Qg:3.5e-9,Qgd:5e-10,Qgs:1e-9,Qgth:7e-10,Qoss:1.5e-8,QossVref:50,qossExp:0.5,Qrr:0,qrrExp:0,CSI:3e-10,Isd:null,Vsd:null,Vsd0:2.2,Eoss:null,EossVref:null,tsw:null,eiRef:null,eiVref:null,Qdrv:null,Iq:null,Vcc:null,RthJC:2,RthCA:10,RthSink:0,tauDead:4e-8,est:["kTperC","RthJC","RthCA"],notes:"EPC2252.m (note: that file's function is misnamed EPC2044); scalar Vsd only, so dead time uses a constant drop"},
+EPC2204:{PN:"EPC2204",vendor:"EPC",technology:"GaN",kind:"discrete",Rdson25:0.0044,RdsonMax:null,IdcRating:null,BVdss:100,VgsRec:5,kTperC:0.006,Vth:1.1,Vpt:2.1,Qg:5.7e-9,Qgd:8e-10,Qgs:1.8e-9,Qgth:1e-9,Qoss:2.5e-8,QossVref:50,qossExp:0.5,Qrr:0,qrrExp:0,CSI:3e-10,Isd:null,Vsd:null,Vsd0:1.7,Eoss:null,EossVref:null,tsw:null,eiRef:null,eiVref:null,Qdrv:null,Iq:null,Vcc:null,RthJC:2,RthCA:10,RthSink:0,tauDead:4e-8,est:["kTperC","RthJC","RthCA"],notes:"per-die values from EPC2204.m; scalar Vsd only"},
+EPC2044:{PN:"EPC2044",vendor:"EPC",technology:"GaN",kind:"discrete",Rdson25:0.007,RdsonMax:null,IdcRating:null,BVdss:100,VgsRec:5,kTperC:0.006,Vth:1.4,Vpt:2.2,Qg:4.3e-9,Qgd:5e-10,Qgs:1.3e-9,Qgth:1e-9,Qoss:1.5e-8,QossVref:50,qossExp:0.5,Qrr:0,qrrExp:0,CSI:3e-10,Isd:null,Vsd:null,Vsd0:2.4,Eoss:null,EossVref:null,tsw:null,eiRef:null,eiVref:null,Qdrv:null,Iq:null,Vcc:null,RthJC:2,RthCA:10,RthSink:0,tauDead:4e-8,est:["kTperC","RthJC","RthCA"],notes:"per-die values from EPC2044.m; scalar Vsd only"},
+EPC2065:{PN:"EPC2065",vendor:"EPC",technology:"GaN",kind:"discrete",Rdson25:0.0027,RdsonMax:null,IdcRating:null,BVdss:100,VgsRec:5,kTperC:0.006,Vth:1.2,Vpt:2.3,Qg:9.4e-9,Qgd:1.7e-9,Qgs:2.6e-9,Qgth:2e-9,Qoss:3.3e-8,QossVref:50,qossExp:0.5,Qrr:0,qrrExp:0,CSI:3e-10,Isd:[5,50],Vsd:[2,2.6],Vsd0:null,Eoss:null,EossVref:null,tsw:null,eiRef:null,eiVref:null,Qdrv:null,Iq:null,Vcc:null,RthJC:2,RthCA:10,RthSink:0,tauDead:4e-8,est:["kTperC","RthJC","RthCA"],notes:"per-die values from EPC2065.m"},
+IRF7759:{PN:"IRF7759",vendor:"Infineon (IR)",technology:"Si",kind:"discrete",Rdson25:0.0018,RdsonMax:null,IdcRating:null,BVdss:75,VgsRec:10,kTperC:0.008,Vth:3,Vpt:5,Qg:2e-7,Qgd:6.2e-8,Qgs:4.8e-8,Qgth:3.7e-8,Qoss:6e-8,QossVref:50,qossExp:0.5,Qrr:1.5e-7,qrrExp:0,CSI:3e-10,Isd:[10,100],Vsd:[0.7,0.83],Vsd0:null,Eoss:null,EossVref:null,tsw:null,eiRef:null,eiVref:null,Qdrv:null,Iq:null,Vcc:null,RthJC:1,RthCA:10,RthSink:0,tauDead:4e-8,est:["kTperC","RthJC","RthCA","BVdss","VgsRec"],notes:"per-die values from IRF7759.m. Qrr = 150 nC is the whole point of the GaN-vs-Si comparison. BVdss/VgsRec are estimates: the .m file carries no ratings."},
+IAUTN08S7N006ATMA1:{PN:"IAUTN08S7N006ATMA1",vendor:"Infineon",technology:"Si",kind:"discrete",Rdson25:0.00053,RdsonMax:0.00057,IdcRating:350,BVdss:80,VgsRec:10,kTperC:0.008,Vth:2.8,Vpt:4.4,Qg:2.29e-7,Qgd:4e-8,Qgs:7e-8,Qgth:4.46e-8,Qoss:5.728e-7,QossVref:50,qossExp:0.5,Qrr:6.9e-8,qrrExp:0,CSI:3e-10,Isd:null,Vsd:null,Vsd0:0.85,Eoss:null,EossVref:null,tsw:null,eiRef:null,eiVref:null,Qdrv:null,Iq:null,Vcc:null,RthJC:0.38,RthCA:14.42,RthSink:0,tauDead:4e-8,est:["kTperC","RthCA","Qgth","Qoss","QossMax","CSI"],notes:"IAUTN08S7N006 (OPN IAUTN08S7N006ATMA1) -- Infineon OptiMOS 7, 80 V automotive Si MOSFET in TOLL (PG-HSOF-8-9). Datasheet IAUTN08S7N006-Data-Sheet-10-Infineon Rev 1.0, 2026-03-17: Rds(on) 0.53 mOhm typ / 0.57 max (VGS=10 V, ID=100 A), Qg 229 nC / Qgs 70 nC / Qgd 40 nC, Vplateau 4.4 V, Vth 2.8 V, Qrr 69 nC (VR=40 V, IF=50 A), VSD 0.85 V typ at IF=100 A, RthJC 0.38 K/W, TjMax 175 C. ESTIMATES (no datasheet row): Qgth from Ciss*Vth (44.6 nC); Qoss from Coss 6404 pF at VDS=40 V via the V^-0.5 law (572.8 nC at 50 V); kTperC is the Si default; RthCA = RthJA typ 14.8 - RthJC max 0.38; CSI is the discrete-package default. The datasheet publishes one VSD point only, so dead time uses it as a scalar drop."},
+EPC23102:{PN:"EPC23102",vendor:"EPC",technology:"GaN",kind:"bridge",Rdson25:0.0052,RdsonMax:0.0066,IdcRating:35,BVdss:100,VgsRec:null,kTperC:0.006,Vth:null,Vpt:null,Qg:null,Qgd:null,Qgs:null,Qgth:null,Qoss:null,QossVref:null,qossExp:0.5,Qrr:0,qrrExp:0,CSI:null,Isd:[0,10],Vsd:[1.7,1.752],Vsd0:1.7,Eoss:5e-7,EossVref:48,tsw:8.96e-9,eiRef:2e-7,eiVref:48,Qdrv:3.44e-8,Iq:0.0226,Vcc:5,RthJC:2,RthCA:10,RthSink:0,tauDead:4e-8,est:["kTperC","RthJC","RthCA","RthSink"],notes:"per-IC values from DeviceFOM.m cfg.eSpec.EPC23102 and EPC23102.m; Eoss 0.5 uJ at 48 V, Qdrv 34.4 nC, Iq 22.6 mA"},
+EPC23104:{PN:"EPC23104",vendor:"EPC",technology:"GaN",kind:"bridge",Rdson25:0.0087,RdsonMax:0.011,IdcRating:15,BVdss:100,VgsRec:null,kTperC:0.006,Vth:null,Vpt:null,Qg:null,Qgd:null,Qgs:null,Qgth:null,Qoss:null,QossVref:null,qossExp:0.5,Qrr:0,qrrExp:0,CSI:null,Isd:null,Vsd:null,Vsd0:1.7,Eoss:3.4e-7,EossVref:48,tsw:null,eiRef:2e-7,eiVref:48,Qdrv:7.8e-9,Iq:0.0152,Vcc:5,RthJC:2,RthCA:10,RthSink:0,tauDead:4e-8,est:["kTperC","RthJC","RthCA","eiRef"],notes:"per-IC values from DeviceFOM.m cfg.eSpec.EPC23104 (the 2026 datasheet decomposition), NOT EPC23104.m's Qg=250 nC fudge; publishes no Eon/Eoff, so eiRef is carried from the 23102"},
+ISG3202LA:{PN:"ISG3202LA",vendor:"Innoscience",technology:"GaN",kind:"bridge",Rdson25:0.0024,RdsonMax:0.0032,IdcRating:60,BVdss:100,VgsRec:null,kTperC:0.0083,Vth:null,Vpt:null,Qg:null,Qgd:null,Qgs:null,Qgth:null,Qoss:5e-8,QossVref:50,qossExp:0.5,Qrr:0,qrrExp:0,CSI:null,Isd:[20,60],Vsd:[1.65,2.09],Vsd0:1.5,Eoss:8.75e-7,EossVref:50,tsw:8e-9,eiRef:null,eiVref:null,Qdrv:3.99e-8,Iq:7.5e-5,Vcc:5,RthJC:4.1,RthCA:10,RthSink:0,tauDead:4e-8,est:["tsw","RthCA"],notes:"per-IC values from ISG3202LA.m; datasheet-checked against ISG3202LA_datasheet.pdf (Rds(on), Qoss, Eoss, BVDSS); tsw is an ESTIMATE: that datasheet publishes no Eon/Eoff"}
+};
+/* ==== PARTS END ==== */
+/* Datasheet LIMITS, kept apart from the electrical model above so that block
+   stays a faithful copy of the .m constructors.  Used by the Tj check and the
+   typ/max toggle.  TjMax is verified against a datasheet PDF committed in this
+   repo for EPC2361, EPC2367, EPC2304, EPC2305 and ISG3202LA (all 150 C) and
+   for IAUTN08S7N006ATMA1 (175 C); the rest are flagged as estimates. */
+var LIMITS={
+  EPC2361:{TjMax:150, RdsonMax:1.0e-3, QossMax:112e-9},
+  EPC2367:{TjMax:150, RdsonMax:1.5e-3, QossMax:63e-9},
+  EPC2304:{TjMax:150, RdsonMax:5.0e-3, QossMax:145e-9},
+  EPC2305:{TjMax:150, RdsonMax:3.0e-3, QossMax:116e-9},
+  EPC2218:{TjMax:150, estAdd:["TjMax"]},
+  EPC2252:{TjMax:150, estAdd:["TjMax"]},
+  EPC2204:{TjMax:150, estAdd:["TjMax"]},
+  EPC2044:{TjMax:150, estAdd:["TjMax"]},
+  EPC2065:{TjMax:150, estAdd:["TjMax"]},
+  IRF7759:{TjMax:175, QrrMax:225e-9, estAdd:["TjMax","QrrMax"]},
+  IAUTN08S7N006ATMA1:{TjMax:175, QossMax:744.6e-9, QrrMax:138e-9},
+  EPC23102:{TjMax:150, estAdd:["TjMax"]},
+  EPC23104:{TjMax:150, estAdd:["TjMax"]},
+  ISG3202LA:{TjMax:150}
+};
+Object.keys(LIMITS).forEach(function(pn){
+  var L=LIMITS[pn]; if(!PARTS[pn]) return;
+  Object.keys(L).forEach(function(k){ if(k!=="estAdd") PARTS[pn][k]=L[k]; });
+  if(L.estAdd) PARTS[pn].est=(PARTS[pn].est||[]).concat(L.estAdd);
+});
+
+/* typ/max: swap the model onto the datasheet maximum where one exists. */
+function withMax(part){
+  var p=Object.assign({},part), missing=[];
+  [["Rdson25","RdsonMax"],["Qoss","QossMax"],["Qrr","QrrMax"]].forEach(function(m){
+    if(part[m[1]]!=null) p[m[0]]=part[m[1]];
+    else if(part[m[0]]) missing.push(m[1]);
+  });
+  return {part:p, missing:missing};
+}
+/* 'est' is a set of estimate-flagged field names; sort it so the order is
+   deterministic for tests and for anything diffing exported JSON. */
+Object.keys(PARTS).forEach(function(k){ if(PARTS[k].est) PARTS[k].est = PARTS[k].est.slice().sort(); });
+
+/* ---------------------------------------------------------------- helpers */
+function qossRef(p){ if(p.Qoss) return [p.Qoss,p.QossVref]; if(p.Eoss&&p.EossVref) return [3*p.Eoss/p.EossVref,p.EossVref]; return [null,null]; }
+function eossRef(p){ if(p.Eoss&&p.EossVref) return [p.Eoss,p.EossVref]; var q=qossRef(p); if(q[0]) return [q[1]*q[0]/3,q[1]]; return [null,null]; }
+function qossAt(p,v){ var q=qossRef(p); if(q[0]==null) return null; return q[0]*Math.pow(v/q[1], p.qossExp==null?0.5:p.qossExp); }
+function eossAt(p,v){ var e=eossRef(p); if(e[0]==null) return null; return e[0]*Math.pow(v/e[1],1.5); }
+
+function gateConfig(p,op){
+  var vdrv = op.Vdrv==null?5:op.Vdrv, ron = op.Ron==null?2.6:op.Ron, roff = op.Roff==null?0.6:op.Roff;
+  var vpt = p.Vpt;
+  if(p.kind==="bridge" || vpt==null) return {Vdrv:vdrv,Ron:ron,Roff:roff,auto:false,warn:null};
+  if(vdrv <= vpt+0.5){
+    if(op.gateRailAuto!==false) return {Vdrv:12,Ron:1.9,Roff:1.9,auto:true,
+      warn:mkWarn("caution","gate_rail_auto","Gate drive rail below the plateau",
+        p.PN+" has a "+vpt.toFixed(1)+" V Miller plateau, so a "+vdrv.toFixed(1)+" V rail would drive Ig_on toward zero and make the overlap time non-physical. The tool switched to the 12 V rail / 1.9 \u03a9, following the DeviceFOM.m rule.")};
+    return {Vdrv:vdrv,Ron:ron,Roff:roff,auto:false,
+      warn:mkWarn("critical","gate_rail_nonphysical","Gate drive at or below the plateau",
+        p.PN+" was asked for "+vdrv.toFixed(1)+" V against a "+vpt.toFixed(1)+" V plateau, and automatic rail selection is off. The overlap time is not physical, so the switching terms are meaningless.")};
+  }
+  return {Vdrv:vdrv,Ron:ron,Roff:roff,auto:false,warn:null};
+}
+/* Resolve the gate-drive rail for ONE device.  A Si MOSFET is quoted at 10 V
+   and a GaN HEMT at 5 V, so forcing one shared rail on an A/B comparison either
+   under-drives the Si part (collapse of Ig_on, inflated overlap) or over-drives
+   the GaN part.  Precedence: per-device override > explicit shared op.Vdrv >
+   the part's own recommended rail VgsRec > 5 V.  A blank per-device field (null)
+   therefore means "drive each device at its recommended rail".  Ron/Roff stay
+   board-level shared values; the rail is the device-level one. */
+function gateFor(p,op,slot){
+  var o=Object.assign({},op), v=null;
+  if(slot && o["Vdrv"+slot]!=null) v=o["Vdrv"+slot];
+  if(v==null) v=o.Vdrv;
+  if(v==null) v=(p.VgsRec==null?5:p.VgsRec);
+  o.Vdrv=v;
+  return o;
+}
+function rcsiOf(p,qgGroup,icom,N,lcsi){ var csi = p.CSI==null?0:p.CSI; if(qgGroup<=0) return 0; return (csi/N+lcsi)*icom/qgGroup; }
+function deadVsd(p,iDie){
+  if(p.Isd&&p.Vsd){ var rsd=(p.Vsd[1]-p.Vsd[0])/(p.Isd[1]-p.Isd[0]); return Math.max(p.Vsd[1]+(iDie-p.Isd[1])*rsd,0); }
+  return p.Vsd0==null?null:Math.max(p.Vsd0,0);
+}
+
+/* ---------------------------------------------------------------- warnings
+ * Structured rather than free text, so the UI can lead with a severity icon
+ * and a short title instead of a run-on sentence.
+ *   severity: 'critical' | 'caution' | 'info'
+ * Consumers must not parse `detail`; branch on `code`. */
+function mkWarn(severity,code,title,detail){ return {severity:severity,code:code,title:title,detail:detail}; }
+
+/* ----------------------------------------------------------------- derive */
+function derive(op,topology){
+  var t = topology || op.topology, fsw = op.fsw, i, groups, warn, mode, band, D, Iout, IL_avg, IL_rms, dIL, Vsw;
+  if(t==="threephase"){
+    var Vdc=op.Vdc, M=op.M==null?1:op.M, PF=op.PF==null?0.9:op.PF, Irms=op.Irms;
+    var Ipk = op.Ipk==null? Irms*SQRT2 : op.Ipk;
+    var Icom = 2*Ipk/PI;
+    var Vph_rms = M*Vdc/(2*SQRT2);
+    var Pout = op.Pout==null? 3*Vph_rms*Irms*PF : op.Pout;
+    groups=[];
+    for(i=0;i<3;i++) groups.push({Vsw:Vdc,nHard:1,deadLegs:1,positions:2,I_rms:Irms,I_dc:0,mode:"switch"});
+    return {groups:groups,nLegsTotal:3,nSwitchLegs:3,Icom:Icom,Ipk:Ipk,Pout:Pout,D:null,IL_avg:null,IL_rms:null,mode:"foc",warnings:[]};
+  }
+  if(t==="buck"||t==="boost"){
+    var Vin=op.Vin, Vout=op.Vout, Pout2=op.Pout, L=op.L;
+    if(t==="buck"){ D=Vout/Vin; Iout=Pout2/Vout; IL_avg=Iout; dIL = (L&&fsw>0)? (Vout*(1-D)/(L*fsw)) : 0; Vsw=Vin; }
+    else { D=1-Vin/Vout; Iout=Pout2/Vout; IL_avg=Pout2/Vin; dIL = (L&&fsw>0)? (Vin*D/(L*fsw)) : 0; Vsw=Vout; }
+    IL_rms=Math.sqrt(IL_avg*IL_avg + dIL*dIL/12);
+    groups=[{Vsw:Vsw,nHard:1,deadLegs:1,positions:2,I_rms:IL_rms,I_dc:0,mode:"switch"}];
+    return {groups:groups,nLegsTotal:1,nSwitchLegs:1,Icom:IL_avg,Ipk:IL_avg+dIL/2,Pout:Pout2,D:D,IL_avg:IL_avg,IL_rms:IL_rms,dIL:dIL,mode:t,warnings:[]};
+  }
+  if(t==="fourswitch"){
+    var Vin2=op.Vin, Vout2=op.Vout, Pout3=op.Pout, L2=op.L;
+    warn=[]; band = op.modeBand==null?0.02:op.modeBand;
+    if(Vin2 > Vout2*(1+band)) mode="buck";
+    else if(Vin2 < Vout2*(1-band)) mode="boost";
+    else { mode="buckboost"; warn.push(mkWarn("caution","mode_buckboost","Vin \u2248 Vout \u2014 both legs switching","Vin = "+Vin2.toFixed(1)+" V and Vout = "+Vout2.toFixed(1)+" V are inside the mode-switch band, so the 4-switch converter is treated as switching both legs. The inductor-current model is nominal here (D = 0.5).")); }
+    if(mode==="buck"){
+      D=Vout2/Vin2; IL_avg=Pout3/Vout2; dIL = (L2&&fsw>0)? (Vout2*(1-D)/(L2*fsw)) : 0;
+      groups=[{Vsw:Vin2,nHard:1,deadLegs:1,positions:2,I_rms:Math.sqrt(IL_avg*IL_avg+dIL*dIL/12),I_dc:0,mode:"switch"},
+              {Vsw:0,nHard:0,deadLegs:0,positions:1,I_rms:0,I_dc:IL_avg,mode:"idle"}];
+    } else if(mode==="boost"){
+      D=1-Vin2/Vout2; IL_avg=Pout3/Vin2; dIL = (L2&&fsw>0)? (Vin2*D/(L2*fsw)) : 0;
+      groups=[{Vsw:0,nHard:0,deadLegs:0,positions:1,I_rms:0,I_dc:IL_avg,mode:"idle"},
+              {Vsw:Vout2,nHard:1,deadLegs:1,positions:2,I_rms:Math.sqrt(IL_avg*IL_avg+dIL*dIL/12),I_dc:0,mode:"switch"}];
+    } else {
+      D=0.5; IL_avg=Pout3/Math.max(Vin2,Vout2); dIL = (L2&&fsw>0)? (Vin2*D/(L2*fsw)) : 0;
+      var ILr=Math.sqrt(IL_avg*IL_avg+dIL*dIL/12);
+      groups=[{Vsw:Vin2,nHard:1,deadLegs:1,positions:2,I_rms:ILr,I_dc:0,mode:"switch"},
+              {Vsw:Vout2,nHard:1,deadLegs:1,positions:2,I_rms:ILr,I_dc:0,mode:"switch"}];
+    }
+    IL_rms=Math.max(groups[0].I_rms,groups[1].I_rms);
+    return {groups:groups,nLegsTotal:2,nSwitchLegs:(mode==="buckboost"?2:1),Icom:IL_avg,Ipk:IL_avg+dIL/2,Pout:Pout3,D:D,IL_avg:IL_avg,IL_rms:IL_rms,dIL:dIL,mode:mode,warnings:warn};
+  }
+  throw new Error("unknown topology "+t);
+}
+
+/* ---------------------------------------------------------- computeLosses */
+function computeLosses(part,op,N,opts){
+  opts = opts||{};
+  // Per-device gate rail: opts.slot ('A'/'B') selects that device's rail.
+  op = gateFor(part,op,opts.slot);
+  // Advanced overrides: op-level qossExp / qrrExp beat the per-part value, so a
+  // silicon part can be re-fitted without editing the library.
+  if(op.qossExp!=null||op.qrrExp!=null){ part=Object.assign({},part);
+    if(op.qossExp!=null) part.qossExp=op.qossExp;
+    if(op.qrrExp!=null) part.qrrExp=op.qrrExp; }
+  var tempMode = opts.tempMode||"converged";
+  var cossBasis = opts.cossBasis||"VQoss";
+  var kTarg = opts.kT;
+  var d = derive(op, op.topology), groups=d.groups, Icom=d.Icom, fsw=op.fsw;
+  var lcsi = op.Lcsi==null?0:op.Lcsi;
+  var lloop = op.Lloop==null?0:op.Lloop;
+  var qrrTjPerC = op.qrrTjPerC==null?0.01:op.qrrTjPerC;
+  var tau = op.tauDead==null? (part.tauDead==null?4e-8:part.tauDead) : op.tauDead;
+  var warnings = d.warnings.slice();
+
+  // Half the loop energy is dissipated at each hard commutation.  With L_loop
+  // left at zero the tool silently omits it, which at 150 A is the same order as
+  // everything it does model -- so say so rather than let the total look complete.
+  (function(){
+    var anyHard=false, est=0, gh, gg;
+    for(gh=0; gh<groups.length; gh++){
+      gg=groups[gh];
+      if(gg.nHard>0){
+        anyHard=true;
+        est += gg.nHard*fsw*0.5*5e-9*(gg.mode==="switch"?gg.I_rms*gg.I_rms:gg.I_dc*gg.I_dc);
+      }
+    }
+    if(anyHard && !(lloop>0)) warnings.push(mkWarn("info","lloop_uncounted","Loop-inductance ringing not counted",
+      "L_loop is 0, so the 0.5*L*I^2 ringing at each hard commutation is omitted. It does not fall with N; at 5 nH it is about "+est.toFixed(1)+" W here. Set L_loop in Advanced."));
+  })();
+
+  // typ/max: move the whole model onto the datasheet maximum where one exists.
+  if(op.useMax){
+    var wm = withMax(part);
+    part = wm.part;
+    if(wm.missing.length) warnings.push(mkWarn("info","typ_max_partial","Typ/max toggle applied only in part",
+      "No datasheet maximum is recorded for "+wm.missing.join(", ")+", so those stay on the typical value. Without a max, the typical figure is the optimistic one."));
+  }
+
+  var gc = gateConfig(part,op);
+  if(gc.warn) warnings.push(gc.warn);
+  // Compare against the RESOLVED rail (gc.Vdrv), not the raw op field: after the
+  // per-device resolution op.Vdrv may have come from VgsRec, in which case there
+  // is no under-drive to report.
+  if(part.VgsRec && gc.Vdrv < part.VgsRec)
+    warnings.push(mkWarn("caution","gate_underdrive","Gate drive below the recommended level",
+      part.PN+" wants about "+part.VgsRec.toFixed(0)+" V of gate drive, but "+gc.Vdrv.toFixed(1)+" V was requested. Rds(on) is quoted at the higher rail, so the conduction and overlap terms are both overstated."));
+  var maxvsw = Math.max.apply(null, groups.map(function(g){return g.Vsw;}));
+  if(part.BVdss && maxvsw > part.BVdss)
+    warnings.push(mkWarn("critical","bvs_exceeded","Switch node exceeds the device rating",
+      "The node swings "+maxvsw.toFixed(0)+" V into a "+part.BVdss.toFixed(0)+" V device. The loss numbers are computed but the part is being operated outside its rating."));
+
+  var isBridge = part.kind==="bridge";
+  N = +N;
+  var rdson25 = part.Rdson25, qch_pd=null, qgd_pd=null, qg_group=null, ig_on=null, ig_off=null;
+  if(!isBridge){
+    qg_group = part.Qg*N;
+    qch_pd = part.Qgs-part.Qgth; qgd_pd = part.Qgd;
+    var rcsi = (op.gateModel||"detailed")==="detailed" ? rcsiOf(part,qg_group,Icom,N,lcsi) : 0;
+    ig_on = (gc.Vdrv-part.Vpt)/(gc.Ron+rcsi);
+    ig_off = part.Vpt/(gc.Roff+rcsi);
+  }
+
+  // switchingTerms() runs once per thermal fixed-point pass, so a warning raised
+  // inside it would be duplicated up to max-iterations times.  Raise each
+  // once-per-run warning through a latch instead.
+  var cossWarned = false;
+  function switchingTerms(rgrp){
+    var cond=0, overlap=0, coss=0, dead=0, qrr=0, ring=0, gi, g, Vsw, q, e, e_cos, qrr_pd, iDie, iRef, qrr_g, v, qch_g, qgd_g, e_on, t_rv, qoss_g, kso, e_off, e_fall, i2g;
+    for(gi=0; gi<groups.length; gi++){
+      g=groups[gi];
+      cond += (g.mode==="switch" ? g.I_rms*g.I_rms : g.I_dc*g.I_dc)*rgrp;
+    }
+    for(gi=0; gi<groups.length; gi++){
+      g=groups[gi]; Vsw=g.Vsw;
+      if(g.nHard>0){
+        if(isBridge){
+          // Time-domain convention (boostBridgeLoss.m): tsw wins when present.
+          // fomMetrics() uses the DeviceFOM.m eSpec convention instead, so the
+          // FOM table can prefer eiRef for a part that carries both.
+          if(part.tsw) e = 0.5*Vsw*Icom*part.tsw;
+          else if(part.eiRef) e = part.eiRef*(Vsw/part.eiVref)*Icom;
+          else e = 0;
+          overlap += g.nHard*fsw*e;
+        } else {
+          qch_g = qch_pd*N; qgd_g = qgd_pd*N;
+          e_on = 0.5*Vsw*Icom*(qch_g/ig_on + qgd_g/ig_on);
+          qoss_g = null; q=qossRef(part);
+          if(q[0]!=null) qoss_g = q[0]*N*Math.pow(Vsw/q[1], part.qossExp==null?0.5:part.qossExp);
+          t_rv = Math.min(qgd_g/ig_off, qoss_g? qoss_g/Math.max(Icom,1e-9) : Infinity);
+          kso = op.kSoftOff==null?0.22:op.kSoftOff;
+          e_off = kso*0.5*Vsw*Icom*t_rv;
+          // AN030 2.2.1: the gate-limited CURRENT-fall phase.  Whenever t_ifall
+          // exceeds the Coss commutation time the node is already at the bus
+          // while the current falls, so it is hard switching and is NOT reduced
+          // by kSoftOff -- that factor models the soft voltage rise only.
+          e_fall = 0.5*Vsw*Icom*(qch_g/ig_off);
+          overlap += g.nHard*fsw*(e_on + e_off + e_fall);
+        }
+        if(cossBasis==="VQoss"){
+          q = qossAt(part,Vsw);
+          if(q==null){
+            if(!cossWarned){ cossWarned=true; warnings.push(mkWarn("caution","coss_unknown","Output charge not specified","Neither Qoss nor Eoss is in the "+part.PN+" record, so the Coss term is reported as unknown rather than as zero.")); }
+            e_cos=null;
+          }
+          else e_cos = Vsw*q*N;
+        } else if(cossBasis==="2Eoss"){ e=eossAt(part,Vsw); e_cos = e==null?null:2*e*N; }
+        else { e=eossAt(part,Vsw); e_cos = e==null?null:e*N; }
+        if(e_cos!=null) coss += g.nHard*fsw*e_cos;
+        qrr_pd = part.Qrr||0;
+        if(qrr_pd){
+          iDie = Icom/N;
+          iRef = (part.Isd||[1,1])[(part.Isd||[1,1]).length-1];
+          qrr_g = N*qrr_pd*Math.pow(iDie/iRef, part.qrrExp==null?0:part.qrrExp);
+          // Qrr rises with junction temperature (roughly doubling 25 -> 125 C).
+          qrr_g *= (1 + qrrTjPerC*((isFinite(Tj)?Tj:tamb)-25));
+          qrr += g.nHard*fsw*Vsw*qrr_g;
+        }
+      }
+      if(g.deadLegs>0){
+        v = deadVsd(part, Icom/N);
+        if(v!=null) dead += g.deadLegs*fsw*2*tau*v*Icom;
+      }
+      // Loop-inductance ringing: 0.5*L*i^2 per hard commutation, averaged over
+      // the fundamental (<i^2> = I_rms^2).  L_loop is layout, so it does not
+      // scale with N once the current is fixed.
+      if(g.nHard>0 && lloop>0){
+        i2g = (g.mode==="switch"? g.I_rms*g.I_rms : g.I_dc*g.I_dc);
+        ring += g.nHard*fsw*0.5*lloop*i2g;
+      }
+    }
+    return {cond:cond,overlap:overlap,coss:coss,dead:dead,qrr:qrr,ring:ring};
+  }
+
+  var gate;
+  if(isBridge){
+    var n_ic = d.nLegsTotal*N;
+    gate = n_ic*(part.Qdrv*part.Vcc*fsw + part.Iq*part.Vcc);
+  } else {
+    var n_pos = 2*d.nSwitchLegs*N;
+    gate = n_pos*part.Qg*gc.Vdrv*fsw;
+  }
+
+  var n_positions=0, gj, g;
+  for(gj=0; gj<groups.length; gj++) n_positions += groups[gj].positions;
+  var rth_jc = part.RthJC||0;
+  var rth_ca = op.RthCA==null?(part.RthCA||0):op.RthCA;
+  var rth_sink = op.RthSink==null?(part.RthSink||0):op.RthSink;
+  var tamb = op.Tamb==null?25:op.Tamb;
+  var kTperC = op.kTperC==null?(part.kTperC||0):op.kTperC;
+  var rth_mode = op.RthMode||"detailed";
+  function thermalResistance(){ return rth_mode==="simple" ? (rth_ca + rth_sink*n_positions) : (rth_jc/N + rth_ca + rth_sink*n_positions); }
+
+  var i2sum=0;
+  for(gj=0; gj<groups.length; gj++){ g=groups[gj]; i2sum += (g.mode==="switch"? g.I_rms*g.I_rms : g.I_dc*g.I_dc); }
+  function rGroup(mult){ return rdson25/N*mult; }
+
+  var Tj=tamb, converged=true, iters=0, rgrp, sw, die, p_pos, tj_new, gain=0, cond25;
+  // Fixed-point relaxation, matching reference.py's default.  1.0 means a plain
+  // substitution; the multiplication is kept so the iteration is bit-for-bit the
+  // same as the oracle that generated reference/golden.json.
+  var RELAX = 1.0;
+  function pack(sw, Tj, converged, gain, iters, rgrp){
+    var diev = sw.cond+sw.overlap+sw.coss+sw.dead+sw.qrr;
+    // `die` stays silicon dissipation.  Loop ringing is a layout loss, so it is
+    // carried separately and added into `total` alongside the driver.
+    var loopv = sw.ring||0;
+    return {terms:{cond:sw.cond,overlap:sw.overlap,coss:sw.coss,dead:sw.dead,qrr:sw.qrr,ring:loopv,gate:gate},
+            die:diev, loop:loopv, driver:gate, total:diev+loopv+gate,
+            eff:effOf(d,diev+loopv+gate), Tj:Tj,
+            converged:converged, gain:gain, iterations:iters, rdson:rgrp, N:N,
+            warnings:warnings, derived:d};
+  }
+  if(tempMode==="none"){ rgrp=rGroup(1); }
+  else if(tempMode==="flat"){ rgrp=rGroup(kTarg==null?(op.kT==null?1.25:op.kT):kTarg); }
+  else if(kTperC<=0){
+    // Rds(on) does not move with temperature, so no iteration is needed -- but
+    // the junction still rises above ambient and must be reported.  rgrp is
+    // final here, so there is no post-loop refresh to make.
+    rgrp=rGroup(1);
+    sw=switchingTerms(rgrp);
+    die=sw.cond+sw.overlap+sw.coss+sw.dead+sw.qrr;
+    Tj = tamb + thermalResistance()*(n_positions? die/n_positions : 0);
+    return pack(sw, Tj, converged, gain, iters, rgrp);
+  }
+  else {
+    // Loop gain referenced to the GROUP's conduction.  The per-position paths
+    // (RthJC/N + RthCA) see P_group/n_positions while the shared sink sees the
+    // whole bridge, so the effective resistance against P_group is
+    // thermalResistance()/n_positions.  Using it un-divided overstates the gain
+    // by exactly n_positions and invents runaway on sane builds.
+    cond25 = i2sum*rdson25/N;
+    gain = n_positions ? thermalResistance()*kTperC*(cond25/n_positions) : 0;
+    if(gain>=1){
+      rgrp=rGroup(1+kTperC*(tamb-25));
+      warnings.push(mkWarn("critical","thermal_runaway","Thermal runaway",
+        "The self-heating loop gain is "+gain.toFixed(2)+" (\u2265 1), from Rth "+thermalResistance().toFixed(2)+" \u00b0C/W, a tempco of "+kTperC.toFixed(4)+" /\u00b0C and "+cond25.toFixed(1)+" W of conduction at 25 \u00b0C. No junction temperature is reported: add copper or parallel dice."));
+      return pack(switchingTerms(rgrp), NaN, false, gain, 0, rgrp);
+    }
+    var ok=true, it;
+    for(it=0; it<200; it++){
+      iters=it+1;
+      rgrp=rGroup(1+kTperC*(Tj-25));
+      sw=switchingTerms(rgrp);
+      die=sw.cond+sw.overlap+sw.coss+sw.dead+sw.qrr;
+      p_pos = n_positions? die/n_positions : 0;
+      tj_new = tamb + thermalResistance()*p_pos;
+      if(Math.abs(tj_new-Tj)<1e-4){ Tj=tj_new; break; }
+      Tj = Tj + RELAX*(tj_new-Tj);
+      if(!isFinite(Tj)||Tj>1500){ converged=false; ok=false; warnings.push(mkWarn("critical","thermal_diverged","Thermal solution diverged","The fixed-point iteration ran away to "+Tj.toFixed(0)+" \u00b0C, so no junction temperature is reported.")); Tj=NaN; break; }
+    }
+    if(ok && it>=200){ converged=false; warnings.push(mkWarn("caution","thermal_noconverge","Thermal solution did not converge","The fixed-point iteration had not settled after 200 passes, so the reported loss does not correspond to a self-consistent junction temperature.")); Tj=NaN; }
+    if(converged && kTperC>0 && isFinite(Tj)) rgrp=rGroup(1+kTperC*(Tj-25));
+  }
+  // The converged branch may have refreshed rgrp after the last loop pass, so
+  // the reported terms must be recomputed at the final rgrp.
+  sw=switchingTerms(rgrp);
+  // Feasibility, not just arithmetic: a converged junction temperature above the
+  // device limit makes the operating point fictional, so say so loudly.  View 2
+  // ("each at its own N_opt") is otherwise happy to crown a device it has just
+  // cooked past its rating.
+  if(part.TjMax && isFinite(Tj) && Tj > part.TjMax)
+    warnings.push(mkWarn("critical","tj_exceeded","Junction temperature above the device limit",
+      "Converged Tj is "+Tj.toFixed(0)+" \u00b0C against a "+part.TjMax+" \u00b0C limit for "+part.PN+
+      ". This operating point is not feasible as a design point, so the loss comparison against it is not meaningful: add copper, parallel more dice, or reduce the current."));
+  return pack(sw, Tj, converged, gain, iters, rgrp);
+}
+function effOf(d,loss){ var pout=d.Pout; if(!pout||pout<=0) return null; return pout/(pout+loss); }
+
+/* ---------------------------------------------------------- fomMetrics */
+/* The Coss basis is an operating-point choice, so the engine keeps it on `op`
+   (next to the other model selectors) rather than as separate UI state. */
+function cossBasisOf(op){ return op.cossBasis||"VQoss"; }
+function fomMetrics(part,op,N,kT,slot){
+  N = N==null?1:N; kT = kT==null?1.25:kT;
+  op = gateFor(part,op,slot);
+  if(op.qossExp!=null||op.qrrExp!=null){ part=Object.assign({},part);
+    if(op.qossExp!=null) part.qossExp=op.qossExp;
+    if(op.qrrExp!=null) part.qrrExp=op.qrrExp; }
+  var d=derive(op,op.topology), groups=d.groups, Icom=d.Icom, fsw=op.fsw, lcsi=op.Lcsi==null?0:op.Lcsi;
+  var isBridge=part.kind==="bridge", r1=part.Rdson25*kT, A=0, gi, g;
+  for(gi=0; gi<groups.length; gi++){ g=groups[gi]; A += (g.mode==="switch"? r1*g.I_rms*g.I_rms : r1*g.I_dc*g.I_dc); }
+  var gc=gateConfig(part,op);
+  var qch_pd = isBridge?null:(part.Qgs-part.Qgth), qgd_pd = isBridge?null:part.Qgd;
+  var a=0,b=0,pstat=0,eov_rep=null,eov,e_cos,Vsw,q,e;
+  if(isBridge){
+    for(gi=0; gi<groups.length; gi++){
+      g=groups[gi]; if(g.nHard<=0) continue;
+      Vsw=g.Vsw;
+      // Integrated-stage overlap energy, DeviceFOM.m's eSpec convention: a
+      // datasheet energy-per-commutated-amp (eiRef) if the part carries one,
+      // else the transition-time form.  computeLosses() deliberately prefers
+      // tsw instead, because it follows boostBridgeLoss.m; parts that carry
+      // both (EPC23102) therefore show a slightly smaller eOv here than the
+      // loss table's overlap.  Both are pinned by the golden reference.
+      if(part.eiRef) eov=part.eiRef*(Vsw/part.eiVref);
+      else if(part.tsw) eov=0.5*Vsw*part.tsw;
+      else eov=0;
+      if(eov_rep==null) eov_rep=eov;
+      b += g.nHard*eov*Icom;
+      if(cossBasisOf(op)==="VQoss") { q=qossAt(part,Vsw); e_cos = Vsw*(q||0); }
+      else if(cossBasisOf(op)==="2Eoss"){ e=eossAt(part,Vsw); e_cos = 2*(e||0); }
+      else { e=eossAt(part,Vsw); e_cos = (e||0); }
+      a += g.nHard*e_cos;
+    }
+    // DeviceFOM.m drives the IC from sw.Vdriver, so the FOM/N_opt path uses
+    // op.Vdrv here; the gate/driver line in computeLosses uses the IC's own
+    // part.Vcc, following boostBridgeLoss.m.  The two agree for the seeded
+    // parts (Vdrv = Vcc = 5 V) and diverge only if the user edits Vdrv.
+    a += d.nLegsTotal*part.Qdrv*gc.Vdrv;
+    pstat = d.nLegsTotal*part.Iq*gc.Vdrv;
+  } else {
+    var qg_group=part.Qg*N;
+    var rcsi = (op.gateModel||"detailed")==="detailed" ? rcsiOf(part,qg_group,Icom,N,lcsi) : 0;
+    var ig_on=(gc.Vdrv-part.Vpt)/(gc.Ron+rcsi), ig_off=part.Vpt/(gc.Roff+rcsi);
+    for(gi=0; gi<groups.length; gi++){
+      g=groups[gi]; if(g.nHard<=0) continue;
+      Vsw=g.Vsw;
+      eov = 0.5*Vsw*(qch_pd+qgd_pd)*(1/ig_on + 1/ig_off);
+      if(eov_rep==null) eov_rep=eov;
+      a += g.nHard*(eov*Icom);
+      if(cossBasisOf(op)==="VQoss"){ q=qossAt(part,Vsw); e_cos = Vsw*(q||0); }
+      else if(cossBasisOf(op)==="2Eoss"){ e=eossAt(part,Vsw); e_cos = 2*(e||0); }
+      else { e=eossAt(part,Vsw); e_cos = (e||0); }
+      a += g.nHard*e_cos;
+    }
+    a += 2*d.nSwitchLegs*part.Qg*gc.Vdrv;
+    if(part.Qrr){ for(gi=0; gi<groups.length; gi++){ g=groups[gi]; if(g.nHard>0) a += g.nHard*part.Qrr*g.Vsw; } }
+  }
+  var B = fsw*a + pstat;
+  var Nopt = B>0 ? Math.sqrt(A/B) : Infinity;
+  var cand=[]; [Math.max(Math.floor(Nopt),1),Math.max(Math.ceil(Nopt),1)].forEach(function(v){ if(cand.indexOf(v)<0) cand.push(v); });
+  cand.sort(function(x,y){return x-y;});
+  var nint=cand[0]; cand.forEach(function(n){ if(A/n+B*n < A/nint+B*nint) nint=n; });
+  var penalty=(0.5*(Nopt/nint+nint/Nopt)-1)*100;
+  var irms_max=0; groups.forEach(function(gg){ if(gg.mode==="switch") irms_max=Math.max(irms_max,gg.I_rms); });
+  var nmin = part.IdcRating? irms_max/(SQRT2*part.IdcRating) : null;
+  var floor = 2*Math.sqrt(A*B) + fsw*b;
+  var fom_hs=null, fom_ss=null;
+  if(!isBridge){ fom_hs=(qgd_pd+qch_pd)*r1; fom_ss=(part.Qg+part.Qoss)*r1; }
+  function p_ab(n){ return A/n + n*(fsw*a+pstat) + fsw*b; }
+  return {A:A,a:a,b:b,Pstat:pstat,B:B,Nopt:Nopt,Nint:nint,penaltyPct:penalty,Nmin:nmin,floor:floor,R1:r1,
+          eOv:(eov_rep==null?null:eov_rep*1e6),
+          R_E:(eov_rep==null?null:r1*(eov_rep*Icom)),
+          R_over_e:(eov_rep? r1/eov_rep : null),
+          FOM_HS:fom_hs,FOM_SS:fom_ss,P_ab:p_ab(nint),P_ab_Nopt:p_ab(Nopt)};
+}
+
+/* ------------------------------------------------------------- UI helpers */
+function sweepFsw(part,op,N,f0,f1,pts,opts){
+  var out=[],i,f,fopt=f0,best=Infinity;
+  var denom = pts>1 ? pts-1 : 1;
+  for(i=0;i<pts;i++){ f=f0*Math.pow(f1/f0,i/denom); var o=Object.assign({},op,{fsw:f}); var r=computeLosses(part,o,N,opts); out.push({fsw:f,r:r}); if(r.total<best){best=r.total;fopt=f;} }
+  return {points:out,fopt:fopt,best:best};
+}
+function optimizeN(part,op,opts,nmax){
+  nmax=nmax||24; var out=[],i,r,bestN=1,best=Infinity;
+  for(i=1;i<=nmax;i++){ r=computeLosses(part,op,i,opts); out.push({N:i,total:r.total,die:r.die,Tj:r.Tj,converged:r.converged}); if(r.total<best){best=r.total;bestN=i;} }
+  return {curve:out,Nbest:bestN,best:best};
+}
+/* Parallel count for one device.  N may be a plain number (same for both, the
+   original form) or {A,B}: a GaN half can run 4 dice against 2 silicon dice, so
+   the build is a per-device choice, not a shared one. */
+function nOf(N,slot){
+  if(N==null) return 1;
+  if(typeof N==="object"){ var v=N[slot]; return v==null?1:v; }
+  return N;
+}
+function compare(A,B,op,N,opts){
+  opts = opts||{};
+  // Resolve each device's own rail before anything is evaluated, so the A/B
+  // comparison is at each part's recommended gate drive rather than one rail.
+  var oA=Object.assign({},opts,{slot:"A"}), oB=Object.assign({},opts,{slot:"B"});
+  var nA=nOf(N,"A"), nB=nOf(N,"B");
+  var fA=fomMetrics(A,op,nA,null,"A"), fB=fomMetrics(B,op,nB,null,"B");
+  var nAo=fA.Nint, nBo=fB.Nint;
+  var rN=[computeLosses(A,op,nA,oA),computeLosses(B,op,nB,oB)];
+  var rO=[computeLosses(A,op,nAo,oA),computeLosses(B,op,nBo,oB)];
+  return {sharedN:rN,eachOpt:rO,N:{A:nA,B:nB},Nopt:{A:nAo,B:nBo},fom:{A:fA,B:fB}};
+}
+/* Total loss over an N x fsw grid, for the design-space map.  Nopt ~ 1/sqrt(fsw)
+   so the optimum is a curve through this plane, not a single point. */
+function sweepHeatmap(part,op,Ns,fsws,opts){
+  var rows=[],i,j,row,o;
+  for(i=0;i<Ns.length;i++){
+    row=[];
+    for(j=0;j<fsws.length;j++){ o=Object.assign({},op,{fsw:fsws[j]}); row.push(computeLosses(part,o,Ns[i],opts).total); }
+    rows.push(row);
+  }
+  return rows;
+}
+function defaultOp(topology){
+  // No op-level Vdrv: a blank/shared rail means each device is driven at its own
+  // recommended rail (VgsRec) via gateFor().  Set op.Vdrv (or VdrvA/VdrvB) to
+  // force a shared/override rail.
+  var base={fsw:40000,Tamb:25,tauDead:4e-8,Ron:2.6,Roff:0.6,Lcsi:0,Lloop:0,
+            kSoftOff:0.22,RthMode:"detailed",RthCA:5,RthSink:0.5,
+            qrrTjPerC:0.01,useMax:false,
+            qossExp:null,cossBasis:"VQoss",modeBand:0.02,gateModel:"detailed",gateRailAuto:true};
+  base.topology=topology;
+  if(topology==="threephase"){ base.Vdc=58; base.Irms=165.4; base.M=1.0; base.PF=0.9; }
+  else { base.Vin = topology==="boost"?25:48; base.Vout = topology==="boost"?55:12; base.Pout=240; base.L=null; }
+  return base;
+}
+
+root.FOMENGINE = {schemaVersion:1, TOPOLOGIES:TOPOLOGIES, PARTS:PARTS,
+  computeLosses:computeLosses, fomMetrics:fomMetrics, derive:derive,
+  qossRef:qossRef, eossRef:eossRef, qossAt:qossAt, eossAt:eossAt,
+  gateConfig:gateConfig, gateFor:gateFor, deadVsd:deadVsd, rcsiOf:rcsiOf, withMax:withMax,
+  sweepFsw:sweepFsw, optimizeN:optimizeN, compare:compare, defaultOp:defaultOp, nOf:nOf,
+  sweepHeatmap:sweepHeatmap};
+})(typeof globalThis!=="undefined"?globalThis:this);
+/* ==== ENGINE END ==== */
+</script>
+<script>
+/* ==== UI BEGIN ==== */
+(function(){
+"use strict";
+var E = (typeof FOMENGINE!=="undefined") ? FOMENGINE : globalThis.FOMENGINE;
+if(!E){ document.body.innerHTML='<p style="padding:20px">Engine failed to load.</p>'; return; }
+var $ = function(id){ return document.getElementById(id); };
+var esc = function(s){ return String(s).replace(/[&<>"]/g,function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]; }); };
+var fmt = function(x,d){ if(x==null||!isFinite(x)) return "&mdash;"; d=(d==null?2:d); var a=Math.abs(x);
+  if(a!==0 && (a<1e-3||a>=1e5)) return x.toExponential(2); return x.toFixed(d); };
+var pct = function(x){ return (x==null||!isFinite(x)) ? "&mdash;" : (100*x).toFixed(2)+"%"; };
+var info = function(t){ return '<span class="info" data-tip="'+esc(t)+'">i</span>'; };
+var BGCOL = "#161c24";   // panel colour, used to halo SVG text off the grid/curves
+
+var TOPNAME = {threephase:"3-phase inverter (FOC/SVPWM)",buck:"Synchronous buck",boost:"Synchronous boost",fourswitch:"4-switch bidirectional buck-boost"};
+var TERMLAB = {cond:"Conduction",overlap:"V&ndash;I overlap (hard turn-on)",coss:"Output capacitance (C<sub>oss</sub>)",dead:"Dead-time reverse conduction",qrr:"Reverse recovery (Q<sub>rr</sub>)",ring:"Loop ringing (L<sub>loop</sub>)",die:"<b>Die total (whole bridge)</b>",gate:"Gate / driver",total:"<b>Whole-bridge total (die + loop + driver)</b>"};
+
+/* Everything that used to be a wall of prose under the tables now lives in a
+   hover/focus tooltip, so the tables themselves stay scannable. */
+var TERMTIP = {
+ cond:"I\u00b2\u00b7Rds(on)(Tj) summed over the switch positions. Rds(on) is divided by N, so conduction falls as 1/N when you parallel dice.",
+ overlap:"Hard turn-on V\u2013I overlap, gate-limited: 0.5\u00b7Vsw\u00b7Icom\u00b7(Qgs\u2212Qgth+Qgd)/Ig_on, plus the residual soft turn-off. Scales as N for a shared gate driver, and is independent of N for an integrated stage.",
+ coss:"Vsw\u00b7Qoss(Vsw) burnt at each hard turn-on \u2014 the EPC AN030 expression for a symmetric half-bridge. For a V^-0.5 Coss that is exactly 3\u00b7Eoss. The Coss basis is switchable in Advanced.",
+ dead:"Third-quadrant / body-diode conduction while both devices are off. Charged at Vsd(Icom/N), so it FALLS as you parallel dice.",
+ qrr:"Body-diode reverse recovery, Qrr\u00b7Vsw\u00b7fsw. A true zero for GaN and 150 nC on the seeded silicon part \u2014 the single term that most separates the two technologies.",
+ die:"Conduction + overlap + Coss + dead time + Qrr, summed over EVERY switch position in the bridge: all legs, high and low side, N dice (or ICs) per position. Gate/driver dissipation is excluded here because it is burnt in the driver, not in the die. Average per-die silicon loss = this row / (positions x N); the hint line under each table prints it.",
+ gate:"Gate charge for a discrete part (Qg\u00b7Vdrv\u00b7fsw per switch position), or the integrated stage's per-cycle driver charge plus its frequency-independent quiescent draw.",
+ total:"Whole-bridge total for the build shown: the die row plus loop ringing and the gate/driver power, summed over every switch position of every leg (each holding its N dice or ICs in parallel). This is the number the semiconductor-only efficiency is taken against, so it is a whole-converter figure, not per leg and not per die. Divide the die row by positions x N for an average per-die figure. No inductor, capacitor, motor, PCB or shunt loss is included.",
+ ring:"The 0.5\u00b7L_loop\u00b7I\u00b2 energy that rings down at every hard commutation, averaged over the fundamental. It comes from the LAYOUT, not the device, so it does not fall as you parallel dice \u2014 which is why it flattens the benefit of a large N. Counted outside the die total, because part of it is dissipated in copper rather than in silicon."
+};
+var FOMTIP = {
+ RE:"R\u00b7E, with E the switching energy per commutated amp. Invariant to die area and to paralleling \u2014 (R/N)\u00b7(E\u00b7N) = R\u00b7E \u2014 so it compares the technology rather than one part number. Lower is better.",
+ eOv:"Overlap energy per commutated amp. The current-invariant way to compare switching behaviour: a 10 A spec and a 150 A spec can be put on one axis.",
+ diebuy:"R1/eOv \u2014 how much die you must buy to reach that switching performance. Lower is better.",
+ FOM_HS:"EPC AN017 hard-switching figure of merit, (Qgd + Qgs2)\u00b7Rds(on), where Qgs2 = Qgs \u2212 Qg(th). Published by EPC, so it is an external check on this table.",
+ FOM_SS:"EPC AN017 soft-switching figure of merit, (Qg + Qoss)\u00b7Rds(on).",
+ Nopt:"Continuous minimiser of A/N + B\u00b7N. Not an integer, and not an asymmetric bridge \u2014 round it and check both neighbours.",
+ Nint:"The better of the two integer neighbours of N_opt: the count actually worth building.",
+ pen:"What rounding N_opt to an integer costs, from the quadratic-flatness law 0.5\u00b7(Nc/N + N/Nc) \u2212 1. 10% off the optimum costs 0.5%.",
+ Nmin:"Parallel count needed to stay inside the per-die continuous current rating. If this exceeds N_opt, the die rating sets the count, not loss.",
+ floor:"The loss floor 2\u00b7\u221a(A\u00b7B): the best achievable whole-bridge total for this device at any N."
+};
+
+/* The Coss basis is an op-level model selector (mirrored by the Advanced
+   control), so it lives on S.op alone.  Keeping a second copy on S meant the
+   two could disagree, and readAdv() would then overwrite the restored value. */
+/* The scenario the page opens on when the URL carries no hash -- the saved
+   fet_fom_scenario.json design point: 3-phase, 58 V bus, 80 A rms phase,
+   25 kHz, EPC2361 against IAUTN08S7N006ATMA1 at N = 1 each, with a 1 nH
+   commutation loop and a 0.3 nH shared source plane.  It is laid over
+   defaultOp() so every field it does not name keeps the normal default, and
+   the engine's defaultOp() itself stays the DeviceFOM.m reference point
+   (40 kHz, 165.4 A rms) that the golden cases pin.  A URL hash or an imported
+   scenario still overrides this on load. */
+var S = {topology:"threephase",
+         op:Object.assign(E.defaultOp("threephase"),{fsw:25000,Irms:80,Lcsi:3e-10,Lloop:1e-9}),
+         A:"EPC2361",B:"IAUTN08S7N006ATMA1",NA:1,NB:1,tj:"converged",logf:true,heatSel:null};
+
+/* ---------------------------------------------------------------- tooltips
+ * One shared floating layer, fed by a data-tip attribute.  Absolutely
+ * positioned against the viewport, clamped inside it, flips below the trigger
+ * when there is no room above, and hides the moment the pointer leaves. */
+function tipLayer(){ return $("tip"); }
+function hideTip(){ var t=tipLayer(); if(t){ t.classList.remove("on"); t.setAttribute("aria-hidden","true"); } }
+function showTip(src){
+  var txt=src.getAttribute("data-tip"), t=tipLayer();
+  if(!t||!txt){ hideTip(); return; }
+  t.textContent=txt;                       // textContent: no markup, newlines kept
+  t.classList.add("on"); t.setAttribute("aria-hidden","false");
+  var r=src.getBoundingClientRect(), tr=t.getBoundingClientRect();
+  var vw=window.innerWidth||1200, vh=window.innerHeight||800;
+  var x=r.left+r.width/2-tr.width/2;
+  var y=r.top-tr.height-10;
+  if(y<8) y=r.bottom+10;                   // flip below when there is no room above
+  t.style.left=Math.max(8,Math.min(vw-tr.width-8,x))+"px";
+  t.style.top=Math.max(8,Math.min(vh-tr.height-8,y))+"px";
+}
+function tipTarget(node){
+  while(node && node.nodeType===1){
+    if(node.getAttribute && node.getAttribute("data-tip")) return node;
+    node=node.parentNode;
+  }
+  return null;
+}
+document.addEventListener("mouseover",function(e){ var n=tipTarget(e.target); if(n) showTip(n); });
+document.addEventListener("mouseout",function(e){
+  var n=tipTarget(e.target); if(!n) return;
+  if(tipTarget(e.relatedTarget)!==n) hideTip();   // ignore moves within the trigger
+});
+document.addEventListener("focusin",function(e){ var n=tipTarget(e.target); if(n) showTip(n); });
+document.addEventListener("focusout",hideTip);
+document.addEventListener("scroll",hideTip,true);
+window.addEventListener("resize",hideTip);
+
+/* ---------------------------------------------------------------- scenario */
+/* N is a positive integer everywhere.  A hand-edited link or scenario must not
+   be able to leave it NaN and paint "NaN" into the form. */
+function clampN(v){ var n=Math.round(+v); return (isFinite(n)&&n>=1)?n:1; }
+/* Back-compat: a scenario or share link saved before per-device rails carried
+   one shared op.Vdrv.  Move it into the two per-device fields so the form shows
+   the rail it actually used, and clearing a field means "follow the device"
+   instead of silently falling back to the old shared value. */
+function migrateGate(op){
+  if(!op) return op;
+  if(op.Vdrv!=null && op.VdrvA==null && op.VdrvB==null){ op.VdrvA=op.Vdrv; op.VdrvB=op.Vdrv; }
+  delete op.Vdrv;
+  return op;
+}
+function saveHash(){
+  try{
+    // cossBasis rides inside S.op, which is serialised here as `o`.
+    var h={t:S.topology,o:S.op,a:S.A,b:S.B,na:S.NA,nb:S.NB,tj:S.tj};
+    history.replaceState(null,"","#"+encodeURIComponent(JSON.stringify(h)));
+  }catch(e){}
+}
+function loadHash(){
+  try{
+    if(!location.hash||location.hash.length<3) return;
+    var h=JSON.parse(decodeURIComponent(location.hash.slice(1)));
+    if(h.t&&E.TOPOLOGIES.indexOf(h.t)>=0) S.topology=h.t;
+    S.op=Object.assign(E.defaultOp(S.topology),h.o||{});
+    S.op.topology=S.topology;   // the URL's t is authoritative over a stale o.topology
+    migrateGate(S.op);
+    if(h.a&&E.PARTS[h.a]) S.A=h.a;
+    if(h.b&&E.PARTS[h.b]) S.B=h.b;
+    // Back-compat: links before per-device N carried a single `n` for both.
+    if(h.n!=null && h.na==null && h.nb==null){ S.NA=clampN(h.n); S.NB=clampN(h.n); }
+    else { if(h.na!=null) S.NA=clampN(h.na); if(h.nb!=null) S.NB=clampN(h.nb); }
+    if(h.tj) S.tj=h.tj;
+    // Back-compat: older share links carried the Coss basis in a top-level `cb`.
+    if(h.cb) S.op.cossBasis=h.cb;
+  }catch(e){}
+}
+function scenarioObj(){
+  // N is kept (A's count) so a pre-per-device reader still sees a sane build.
+  return {schemaVersion:E.schemaVersion, kind:"scenario", topology:S.topology, op:S.op,
+          A:S.A, B:S.B, N:S.NA, NA:S.NA, NB:S.NB, tj:S.tj, cossBasis:S.op.cossBasis};
+}
+function applyScenario(d){
+  if(d.topology&&E.TOPOLOGIES.indexOf(d.topology)>=0) S.topology=d.topology;
+  S.op=Object.assign(E.defaultOp(S.topology), d.op||{});
+  S.op.topology=S.topology;
+  migrateGate(S.op);
+  if(d.A&&E.PARTS[d.A]) S.A=d.A;
+  if(d.B&&E.PARTS[d.B]) S.B=d.B;
+  // `N` alone is the legacy shared count; NA/NB override per device.
+  var leg = d.N!=null ? clampN(d.N) : null;
+  if(d.NA!=null) S.NA=clampN(d.NA); else if(leg!=null) S.NA=leg;
+  if(d.NB!=null) S.NB=clampN(d.NB); else if(leg!=null) S.NB=leg;
+  if(d.tj) S.tj=d.tj;
+  // The scenario's top-level field wins over whatever d.op carried.
+  if(d.cossBasis) S.op.cossBasis=d.cossBasis;
+  renderForm(); renderAdv(); renderDevs();
+}
+
+/* ------------------------------------------------------------------ inputs */
+var COMMON=[{k:"fsw",l:"Switching frequency f<sub>sw</sub> [kHz]",sc:1e3,st:1,tip:"Carrier frequency per device: one hard turn-on and one turn-off per device per period."},
+            {k:"tauDead",l:"Dead time, each edge [ns]",sc:1e-9,st:1,tip:"Dead time per edge. During it the recirculating current freewheels through the reverse channel at Vsd(Icom/N); two edges per leg per cycle."},
+            {k:"VdrvA",l:"Gate drive A [V]",st:0.1,tip:"Gate-drive rail for device A. Leave blank to drive A at its own recommended rail (the part's VgsRec), so a 10 V silicon part and a 5 V GaN part are compared each at their own rail instead of one shared rail. If the rail is within 0.5 V of the plateau the tool auto-selects 12 V (the DeviceFOM.m rule), because otherwise Ig_on collapses and the overlap time is not physical."},
+            {k:"VdrvB",l:"Gate drive B [V]",st:0.1,tip:"Gate-drive rail for device B. Leave blank to drive B at its own recommended rail (the part's VgsRec). Per-device rails are what make a Si-vs-GaN comparison meaningful: one shared rail either under-drives the silicon part (inflating its overlap loss) or over-drives the GaN part past its absolute maximum."},
+            {k:"Ron",l:"Turn-on loop resistance [&Omega;]",st:0.1,tip:"Total turn-on loop resistance: driver pull-up + gate resistor + internal. It sets the current-rise and voltage-fall times, so it sets the overlap loss."},
+            {k:"Roff",l:"Turn-off loop resistance [&Omega;]",st:0.1,tip:"Total turn-off loop resistance. It sets the minimum dead time and the off-state Miller immunity."},
+            {k:"Tamb",l:"Ambient T<sub>amb</sub> [&deg;C]",st:1,tip:"Ambient temperature. The junction temperature is solved against this plus the three-term thermal path, and Rds(on) follows Tj."}];
+var PERTOP={
+  threephase:[{k:"Vdc",l:"Bus V<sub>dc</sub> [V]",st:1,tip:"DC bus. Each leg swings the full bus, so every switching term scales with it."},
+              {k:"Irms",l:"Phase current I<sub>rms</sub> [A]",st:1,tip:"Phase current, rms. The commutated current used for the overlap and dead-time terms is <|i|> = 2\u00b7Ipk/\u03c0."},
+              {k:"M",l:"Modulation index M",st:0.01,tip:"Modulation index, 0..2/\u221a3. Sets the output power and the voltage ceiling."},
+              {k:"PF",l:"Power factor cos&phi;",st:0.01,tip:"Power factor. Used only to derive output power for the semiconductor-only efficiency figure."}],
+  buck:[{k:"Vin",l:"Input V<sub>in</sub> [V]",st:1,tip:"Input voltage."},
+        {k:"Vout",l:"Output V<sub>out</sub> [V]",st:1,tip:"Output voltage. Duty is derived from the ratio, so there is no duty input."},
+        {k:"Pout",l:"Output power [W]",st:1,tip:"Output power. The inductor current is derived from this and the voltages."},
+        {k:"L",l:"Inductor L [&micro;H] (optional, for ripple)",sc:1e-6,st:0.1,tip:"Optional. If given, the inductor ripple is folded into the conduction current as \u221a(Iavg\u00b2 + \u0394I\u00b2/12). Inductor LOSS itself is never counted \u2014 only the extra FET conduction it causes."}],
+  boost:null,fourswitch:null};
+// Boost and 4-switch take the same bus/load inputs as the buck (Vin, Vout,
+// Pout and an optional L); only the duty/ripple derivation differs.
+PERTOP.boost=PERTOP.buck; PERTOP.fourswitch=PERTOP.buck;
+
+var FIELDS={};
+[].concat(COMMON,PERTOP.threephase,PERTOP.buck).forEach(function(f){ FIELDS[f.k]=f; });
+
+var ADV=[{k:"RthMode",l:"Thermal model",type:"select",
+          tip:"'detailed' is Tj = Tamb + RthJC\u00b7(P_die/N) + RthCA\u00b7P_die + RthSink\u00b7P_bridge. 'simple' collapses that to one per-position Rth, i.e. you assert RthCA already includes the junction-to-case path.",
+          opts:[["detailed","detailed: R<sub>thJC</sub>/N + R<sub>thCA</sub> + shared sink"],["simple","simple: one per-position R<sub>th</sub> (R<sub>thCA</sub> already includes JC)"]]},
+         {k:"RthCA",l:"Case&rarr;ambient R<sub>thCA</sub> [&deg;C/W] (per position, shared by its N dice)",st:0.1,
+          tip:"Thermal resistance from one switch position's copper to ambient. It is shared by all N dice in that position, so the whole position's loss flows through it."},
+         {k:"RthSink",l:"Shared sink R<sub>thSink</sub> [&deg;C/W]",st:0.1,
+          tip:"Optional whole-bridge sink, shared across every switch position."},
+         {k:"kTperC",l:"R<sub>ds(on)</sub> tempco [1/&deg;C]",st:0.001,
+          tip:"Rds(on) multiplier = 1 + kTperC\u00b7(Tj \u2212 25). Defaults from the technology where the datasheet in this repo does not carry it, so it is an estimate for those parts."},
+         {k:"Lloop",l:"Commutation loop inductance L<sub>loop</sub> [nH]",sc:1e-9,st:0.1,
+          tip:"Layout loop inductance. 0.5*L*I^2 is dissipated at every hard commutation and is NOT reduced by paralleling dice, so at 150 A it can be the largest single term. 0 (the default) omits it and says so in the Warnings panel; 3-10 nH is typical for a paralleled discrete layout."},
+         {k:"qrrTjPerC",l:"Q<sub>rr</sub> temperature coefficient [1/&deg;C]",st:0.001,
+          tip:"Body-diode recovery charge roughly doubles from 25 C to 125 C, so Qrr is evaluated at the converged junction temperature as Qrr(25)*(1 + k*(Tj-25)). Default 0.01 /C. Set 0 for the datasheet 25 C value. Estimate."},
+         {k:"useMax",l:"Device data",type:"select",
+          tip:"Switch the whole model onto the datasheet maximum where one is recorded (Rds(on), Qoss, Qrr). Parts with no max recorded stay on the typical value, and the Warnings panel says which. Typical is the optimistic number.",
+          opts:[["false","typical values"],["true","maximum values where recorded"]]},
+         {k:"kSoftOff",l:"k<sub>SoftOff</sub> soft turn-off factor",st:0.01,
+          tip:"Turn-off in an inductive-load half-bridge is nearly soft, so only the voltage-rise part belongs in the overlap. motorDriveLoss.m anchors 0.22 to EPC23102's measured EOFF/EON = 0.06. Set 1.0 to reproduce EPC AN030's naive turn-off triangle instead."},
+         {k:"cossBasis",l:"C<sub>oss</sub> basis",type:"select",
+          tip:"V\u00b7Qoss is the EPC AN030 expression for a symmetric half-bridge, and equals exactly 3\u00b7Eoss for a V^-0.5 Coss. The 2\u00b7Eoss rule of thumb is 1.5\u00d7 smaller, so this control is the sensitivity on that factor.",
+          opts:[["VQoss","V&middot;Q<sub>oss</sub> &mdash; EPC AN030 (default)"],["2Eoss","2&middot;E<sub>oss</sub> &mdash; common rule of thumb"],["Eoss","E<sub>oss</sub> &mdash; stored energy only"]]},
+         {k:"gateModel",l:"Gate-loop model",type:"select",
+          tip:"'detailed' includes common-source inductance in the gate loop (motorDriveLoss.m). 'fom' excludes it, which is the DeviceFOM.m convention and makes the closed-form N_opt exact.",
+          opts:[["detailed","detailed: includes common-source L (motorDriveLoss.m)"],["fom","fom: excludes it, so N<sub>opt</sub> is exact (DeviceFOM.m)"]]},
+         {k:"Lcsi",l:"Shared source-plane inductance L<sub>csi</sub> [nH]",sc:1e-9,st:1,
+          tip:"Source-plane copper common to all N dice, as opposed to the per-die package inductance held in the device file. It carries the whole switch current, so its effect only falls as 1/N."},
+         {k:"qossExp",l:"Q<sub>oss</sub>(V) exponent",st:0.01,
+          tip:"Coss ~ V^-exponent, so Qoss ~ V^(1-exponent). 0.5 is the GaN fit. Blank uses the per-part value. For silicon this is the weakest approximation in the model, which is why it is sweepable."},
+         {k:"qrrExp",l:"Q<sub>rr</sub>(I) exponent",st:0.01,
+          tip:"0 = a fixed per-die charge, so the paralleled group's Qrr scales as N, which is conservative against silicon. 1 = Qrr linear in current, making the group total independent of N. Blank uses the per-part value."},
+         {k:"modeBand",l:"4-switch mode-switch band (fraction of V<sub>out</sub>)",st:0.01,
+          tip:"Hysteresis band around Vin = Vout before the 4-switch converter is treated as switching both legs."}];
+
+function mkField(f){
+  var v=S.op[f.k];
+  if(v==null) v=""; else if(f.sc) v=v/f.sc;
+  var id="fld_"+f.k;
+  return '<label for="'+id+'">'+f.l+(f.tip?info(f.tip):'')+'</label><input id="'+id+'" data-k="'+f.k+'"'+(f.sc?' data-sc="'+f.sc+'"':'')+
+         ' type="number" step="'+(f.st||"any")+'" value="'+v+'">';
+}
+/* Effective per-device gate rail: gateFor() fills in the part's recommended
+   rail, gateConfig() then applies the auto-12 V plateau safeguard. */
+function effRail(p,slot){ return E.gateConfig(p,E.gateFor(p,S.op,slot)).Vdrv; }
+/* Per-device rail field; the placeholder is the recommended rail a blank field
+   resolves to, so it updates when the device selector changes. */
+function gateRail(slot){
+  var f=FIELDS["Vdrv"+slot], k="Vdrv"+slot, pn=S[slot], p=E.PARTS[pn];
+  var def=(p&&p.VgsRec!=null)?p.VgsRec:5;
+  var v=S.op[k]; if(v==null) v="";
+  var id="fld_"+k;
+  return '<label for="'+id+'"><span class="devdot '+slot.toLowerCase()+'"></span>Gate drive '+slot+' [V]'+info(f.tip)+'</label>'+
+    '<input id="'+id+'" data-k="'+k+'" type="number" step="0.1" value="'+v+'" placeholder="'+(p?esc(p.PN)+" recommends ":"")+def+' V">';
+}
+/* Per-device parallel count.  A GaN half can legitimately run a different number
+   of dice than a silicon half, so N is a per-device build choice, not one number
+   forced on both. */
+function nField(slot){
+  var pn=S[slot], p=E.PARTS[pn], id="f_N"+slot;
+  var tip="How many dice (discrete) or half-bridge ICs (integrated) sit in parallel in each switch position for device "+slot+". A and B may differ, e.g. 4 GaN dice against 2 silicon dice. README section 3 lists how every term commits to N.";
+  return '<div><label for="'+id+'"><span class="devdot '+slot.toLowerCase()+'"></span>N &mdash; '+slot+(p?' ('+esc(p.PN)+')':'')+info(tip)+'</label>'+
+    '<input id="'+id+'" type="number" min="1" step="1" value="'+S["N"+slot]+'"></div>';
+}
+function renderForm(){
+  var t=S.topology, h="";
+  h+='<div class="fgroup"><h3>Topology &amp; build</h3>';
+  h+='<label for="topo">Topology</label><select id="topo">'+E.TOPOLOGIES.map(function(x){
+    return '<option value="'+x+'"'+(x===t?' selected':'')+'>'+TOPNAME[x]+'</option>';}).join("")+'</select>';
+  h+='<div class="row">'+nField("A")+nField("B")+'</div>';
+  h+='</div>';
+  h+='<div class="fgroup"><h3>Switching</h3>'+["fsw","tauDead"].map(function(k){ return mkField(FIELDS[k]); }).join("")+'</div>';
+  h+='<div class="fgroup"><h3>Bus &amp; load</h3>'+PERTOP[t].map(mkField).join("")+'</div>';
+  h+='<div class="fgroup"><h3>Gate drive</h3>'+["A","B"].map(gateRail).join("")+
+     ["Ron","Roff"].map(function(k){ return mkField(FIELDS[k]); }).join("")+'</div>';
+  h+='<div class="fgroup"><h3>Ambient</h3>'+mkField(FIELDS.Tamb)+'</div>';
+  $("form").innerHTML=h;
+  $("topo").addEventListener("change",function(){
+    // Only the Bus & load block is topology-specific.  Carry the switching,
+    // gate-drive, ambient and Advanced edits across the switch instead of
+    // silently resetting them to that topology's defaults.
+    var t=this.value, keep={};
+    ["fsw","tauDead","VdrvA","VdrvB","Ron","Roff","Tamb"].forEach(function(k){ keep[k]=S.op[k]; });
+    ADV.forEach(function(f){ keep[f.k]=S.op[f.k]; });
+    S.topology=t;
+    S.op=Object.assign(E.defaultOp(t), keep, {topology:t});
+    renderForm(); renderAdv(); run();
+  });
+}
+function readForm(){
+  Array.prototype.forEach.call($("form").querySelectorAll("input[data-k]"),function(el){
+    var sc=el.dataset.sc?parseFloat(el.dataset.sc):1, raw=el.value.trim();
+    S.op[el.dataset.k]= raw===""?null: parseFloat(raw)*sc;
+  });
+  S.NA=clampN($("f_NA").value); S.NB=clampN($("f_NB").value);
+}
+function renderAdv(){
+  var h='<details><summary>show / hide</summary>';
+  h+=ADV.map(function(f){
+    var id="adv_"+f.k;
+    if(f.type==="select"){
+      return '<label for="'+id+'">'+f.l+(f.tip?info(f.tip):'')+'</label><select id="'+id+'" data-ak="'+f.k+'">'+f.opts.map(function(o){
+        return '<option value="'+o[0]+'"'+(String(S.op[f.k])===o[0]?' selected':'')+'>'+o[1]+'</option>';}).join("")+'</select>';
+    }
+    var v=S.op[f.k]; if(v==null) v=""; else if(f.sc) v=v/f.sc;
+    return '<label for="'+id+'">'+f.l+(f.tip?info(f.tip):'')+'</label><input id="'+id+'" data-ak="'+f.k+'"'+(f.sc?' data-sc="'+f.sc+'"':'')+' type="number" step="'+(f.st||"any")+'" value="'+v+'">';
+  }).join("");
+  h+='<div class="hint">Every field here is an estimate unless the part file says so, and the device panel badges how many estimate fields each part carries. The 25 &deg;C / converged-T<sub>j</sub> switch is at the top of the loss breakdown.</div>';
+  h+='</details>';
+  $("adv").innerHTML=h;
+}
+function readAdv(){
+  Array.prototype.forEach.call($("adv").querySelectorAll("input[data-ak],select[data-ak]"),function(el){
+    var sc=el.dataset.sc?parseFloat(el.dataset.sc):1, raw=(el.value||"").trim();
+    if(el.tagName==="SELECT"){ S.op[el.dataset.ak]= (el.dataset.ak==="useMax") ? (raw==="true") : raw; }
+    else S.op[el.dataset.ak]= raw===""?null: parseFloat(raw)*sc;
+  });
+}
+
+/* --------------------------------------------------------------- results */
+/* Scope of every loss figure in the tables and charts: a WHOLE-BRIDGE total
+   for the build shown -- all legs, both switch positions, all N dice or ICs in
+   parallel.  nPositionsOf() counts the topology's switch positions so the hint
+   can state that scope and print the average per-die figure. */
+function nPositionsOf(r){ var n=0; if(r&&r.derived&&r.derived.groups) r.derived.groups.forEach(function(g){ n+=g.positions||0; }); return n||1; }
+function lossTable(rA,rB,title,ca,cb){
+  var keys=["cond","overlap","coss","dead","qrr","ring","die","gate","total"];
+  // Scale is per TABLE SECTION, over the component terms, so a row's bar length
+  // is comparable with every other component row in the same table.
+  var max=0; keys.forEach(function(k){ if(k==="die"||k==="total")return; max=Math.max(max,rA.terms[k],rB.terms[k]); });
+  if(max<=0) max=1;
+  var totA=rA.die+rA.loop+rA.driver, totB=rB.die+rB.loop+rB.driver;
+  var nPos=nPositionsOf(rA);
+  function rowTip(k,a,b){
+    var name=TERMLAB[k].replace(/<[^>]+>/g,"");
+    return name+"\n"+TERMTIP[k]+"\nA: "+fmt(a,3)+" W  ("+pct(a/totA)+" of A total)\nB: "+fmt(b,3)+" W  ("+pct(b/totB)+" of B total)";
+  }
+  function w(v){ return Math.max(0,Math.min(100,100*v/max)).toFixed(1)+"%"; }
+  // A row that is zero because its input is switched off must not read as a
+  // broken calculation, so it says "off" and explains itself on hover.
+  var ringOff = !(S.op.Lloop>0);
+  var rows=keys.map(function(k){
+    var a=k==="die"?rA.die:k==="total"?rA.total:rA.terms[k];
+    var b=k==="die"?rB.die:k==="total"?rB.total:rB.terms[k];
+    var d=b-a, heavy=(k==="die"||k==="total"), win=(heavy||!isFinite(d)||Math.abs(d)<1e-9)?"":(a<b?"A":"B");
+    var off=(k==="ring" && ringOff);
+    var tip = off
+      ? "Loop ringing is off because L_loop = 0.\n"+TERMTIP.ring+"\nSet L_loop in Advanced to include it."
+      : rowTip(k,a,b);
+    var vals;
+    if(off){
+      var offTip=esc("L_loop = 0, so this term is not computed. Set L_loop in Advanced to include it.");
+      vals='<td class="num mut" data-tip="'+offTip+'">off</td><td class="track"></td>'+
+           '<td class="num mut" data-tip="'+offTip+'">off</td><td class="track"></td>';
+    } else {
+      vals='<td class="num" data-tip="'+esc("A: "+fmt(a,3)+" W = "+pct(a/totA)+" of A's total")+'">'+fmt(a)+'</td>'+
+           '<td class="track"><span class="track-bg" data-tip="'+esc("A: "+pct(a/totA)+" of A's total")+'"><span style="width:'+w(a)+'"></span></span></td>'+
+           '<td class="num" data-tip="'+esc("B: "+fmt(b,3)+" W = "+pct(b/totB)+" of B's total")+'">'+fmt(b)+'</td>'+
+           '<td class="track"><span class="track-bg" data-tip="'+esc("B: "+pct(b/totB)+" of B's total")+'"><span class="b" style="width:'+w(b)+'"></span></span></td>';
+    }
+    return '<tr'+(heavy?' class="tot"':'')+'>'+
+      '<td class="has-tip" data-tip="'+esc(tip)+'">'+TERMLAB[k]+'</td>'+vals+
+      '<td class="num'+(off?"":(win==="A"?" ca":win==="B"?" cb":""))+'">'+(off?"&mdash;":fmt(d))+'</td>'+
+      '<td class="'+(win==="A"?"winA":win==="B"?"winB":"")+'">'+(off?"&mdash;":(win?'<span class="wchip">'+(win==="A"?"\u25bc A":"\u25bc B")+'</span>':"&mdash;"))+'</td></tr>';
+  }).join("");
+  return '<div class="tscroll"><table><thead><tr><th>'+title+'</th>'+
+    '<th colspan="2"><span class="devdot a"></span>'+esc(ca)+'</th><th colspan="2"><span class="devdot b"></span>'+esc(cb)+'</th>'+
+    '<th>&Delta;(B&minus;A)</th><th>lower</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
+    '<div class="hint">Whole-bridge totals &mdash; every leg, both switch positions ('+nPos+' here), all N dice / ICs per position &middot; per-die silicon loss '+fmt(rA.die/(nPos*rA.N),2)+' / '+fmt(rB.die/(nPos*rB.N),2)+' W &middot; T<sub>j</sub> '+fmt(rA.Tj,1)+' / '+fmt(rB.Tj,1)+' &deg;C &middot; semiconductor-only &eta; '+pct(rA.eff)+' / '+pct(rB.eff)+
+    (rA.converged&&rB.converged?'':' &middot; <span class="bad">non-converged thermal solution</span>')+'</div>';
+}
+function fomRows(fA,fB){
+  // A null R_E (no overlap-energy model at all) must stay null: multiplying it
+  // by 1e9 here would print a fake 0 and hand that device the "lower" tag.
+  var rows=[["R&middot;E &mdash; technology FOM <span class='tag'>N-invariant</span>",fA.R_E==null?null:fA.R_E*1e9,fB.R_E==null?null:fB.R_E*1e9,"n&Omega;&middot;J",true,FOMTIP.RE],
+            ["eOv &mdash; overlap energy / commutated amp",fA.eOv,fB.eOv,"&micro;J/A",true,FOMTIP.eOv],
+            ["R1/eOv &mdash; die you must buy",fA.R_over_e,fB.R_over_e,"",true,FOMTIP.diebuy],
+            ["FOM<sub>HS</sub> = (Q<sub>gd</sub>+Q<sub>gs2</sub>)&middot;R<sub>ds(on)</sub>",fA.FOM_HS==null?null:fA.FOM_HS*1e12,fB.FOM_HS==null?null:fB.FOM_HS*1e12,"m&Omega;&middot;nC",true,FOMTIP.FOM_HS],
+            ["FOM<sub>SS</sub> = (Q<sub>g</sub>+Q<sub>oss</sub>)&middot;R<sub>ds(on)</sub>",fA.FOM_SS==null?null:fA.FOM_SS*1e12,fB.FOM_SS==null?null:fB.FOM_SS*1e12,"m&Omega;&middot;nC",true,FOMTIP.FOM_SS],
+            ["N<sub>opt</sub> (continuous)",fA.Nopt,fB.Nopt,"",null,FOMTIP.Nopt],
+            ["N<sub>opt</sub> (integer, best neighbour)",fA.Nint,fB.Nint,"",null,FOMTIP.Nint],
+            ["rounding penalty vs continuous optimum",fA.penaltyPct,fB.penaltyPct,"%",true,FOMTIP.pen],
+            ["N<sub>min</sub> from the per-die current rating",fA.Nmin,fB.Nmin,"",null,FOMTIP.Nmin],
+            ["loss floor at N<sub>opt</sub>",fA.floor,fB.floor,"W",true,FOMTIP.floor]];
+  return rows.map(function(r){
+    // A "lower" tag needs two finite numbers to compare; NaN/Infinity rows (a
+    // degenerate operating point) must not silently award the win to B.
+    var w=(r[4]===null||r[1]==null||r[2]==null||!isFinite(r[1])||!isFinite(r[2])||Math.abs(r[1]-r[2])<1e-12)?"":(r[1]<r[2]?"A":"B");
+    var name=r[0].replace(/<[^>]+>/g,"");
+    return '<tr><td class="has-tip" data-tip="'+esc(name+"\n"+(r[5]||""))+'">'+r[0]+'</td>'+
+           '<td class="num">'+fmt(r[1],3)+'</td><td class="num">'+fmt(r[2],3)+'</td><td class="mut">'+r[3]+'</td>'+
+           '<td class="'+(w==="A"?"winA":w==="B"?"winB":"")+'">'+(w?'<span class="wchip">'+(w==="A"?"\u25bc A":"\u25bc B")+'</span>':"&mdash;")+'</td></tr>';
+  }).join("");
+}
+function fomTable(fA,fB,ca,cb){
+  return '<div class="tscroll"><table><thead><tr><th>Figure of merit</th><th><span class="devdot a"></span>'+esc(ca)+'</th><th><span class="devdot b"></span>'+esc(cb)+'</th><th>unit</th><th>lower</th></tr></thead><tbody>'+
+    fomRows(fA,fB)+'</tbody></table></div>';
+}
+
+/* --------------------------------------------------- topology picture + KPIs */
+function topoSVG(t, colIn){
+  // Taller than wide-ish (400x310) so the drawing fills the hero row height
+  // set by the KPI panel instead of letterboxing inside it.
+  var W=400, H=310, col=colIn||"#4aa3ff", topY=40, botY=276, midY=152;
+  /* Palette: wires one step above the panel, boxes one step above the wires,
+     dots carrying a hairline of the background so they stay crisp. */
+  function wire(x1,y1,x2,y2){ return '<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="#51687f" stroke-width="1.4" stroke-linecap="round"/>'; }
+  function dot(x,y){ return '<circle cx="'+x+'" cy="'+y+'" r="3" fill="#4aa3ff" stroke="#0d1116" stroke-width="1"/>'; }
+  function rbox(x,y,w,h,l,fs){ return '<rect x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" rx="5" fill="#1b242e" stroke="#333f4d"/>'+
+    '<text x="'+(x+w/2)+'" y="'+(y+h/2+4)+'" fill="#e8eef5" font-size="'+(fs||11)+'" text-anchor="middle">'+l+'</text>'; }
+  function swBox(x,y,l){ return '<rect x="'+x+'" y="'+y+'" width="54" height="40" rx="5" fill="'+col+'" fill-opacity="0.16" stroke="'+col+'" stroke-width="1.4"/>'+
+    '<text x="'+(x+27)+'" y="'+(y+25)+'" fill="#e8eef5" font-size="11" font-weight="600" text-anchor="middle">'+l+'</text>'; }
+  function leg(x){ return wire(x+27,topY,x+27,64)+swBox(x,64,"HS")+wire(x+27,104,x+27,200)+swBox(x,200,"LS")+wire(x+27,240,x+27,botY)+dot(x+27,midY); }
+  function lab(x,y,txt,anchor,fill,fs){ return '<text x="'+x+'" y="'+y+'" fill="'+(fill||"#8fa1b3")+'" font-size="'+(fs||10)+'" text-anchor="'+(anchor||"start")+'">'+txt+'</text>'; }
+  var s='<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet">';
+  if(t==="threephase"){
+    s+=wire(16,topY,206,topY)+wire(16,botY,206,botY);
+    s+=lab(16,topY-7,"V")+lab(24,topY-8,"dc","start","#8fa1b3",8)+lab(16,botY+17,"gnd");
+    [16,84,152].forEach(function(x,i){
+      s+=leg(x);
+      var sw=x+27;
+      s+=wire(sw,midY,sw+12,midY)+lab(sw+16,midY+5,String.fromCharCode(65+i),"start","#e8eef5",11);
+    });
+    s+='<circle cx="340" cy="'+midY+'" r="30" fill="#1b242e" stroke="#333f4d"/>'+lab(340,midY+5,"M 3~","middle","#e8eef5",12);
+    [midY-26,midY,midY+26].forEach(function(y,i){
+      s+=wire(310,y,272,y)+lab(266,y+4,String.fromCharCode(65+i),"end",col,11);
+    });
+    s+=lab(340,midY+56,"3-phase motor","middle","#8fa1b3",10);
+  } else if(t==="buck"){
+    s+=wire(16,topY,280,topY)+wire(16,botY,280,botY);
+    s+=lab(16,topY-7,"V")+lab(24,topY-8,"in","start","#8fa1b3",8)+lab(16,botY+17,"gnd");
+    s+=leg(30);
+    s+=wire(57,midY,120,midY)+rbox(120,midY-14,48,28,"L")+wire(168,midY,224,midY)+dot(224,midY);
+    s+=lab(224,midY-20,"V")+lab(232,midY-21,"out","start","#8fa1b3",8);
+    s+=rbox(204,200,40,44,"load",10)+wire(224,midY,224,200)+wire(224,244,224,botY);
+    s+=wire(168,midY,168,196)+
+       '<line x1="158" y1="196" x2="178" y2="196" stroke="#51687f" stroke-width="1.6"/>'+
+       '<line x1="158" y1="206" x2="178" y2="206" stroke="#51687f" stroke-width="1.6"/>'+
+       wire(168,206,168,botY);
+  } else if(t==="boost"){
+    s+=wire(120,topY,300,topY)+wire(16,botY,300,botY);
+    s+=lab(120,topY-7,"V")+lab(128,topY-8,"out","start","#8fa1b3",8)+lab(16,botY+17,"gnd");
+    s+=lab(16,midY-8,"V")+lab(24,midY-9,"in","start","#8fa1b3",8);
+    s+=wire(16,midY,36,midY)+rbox(36,midY-14,48,28,"L")+wire(84,midY,120,midY);
+    s+=leg(93)+dot(120,midY);
+  } else {
+    s+=wire(16,botY,330,botY)+lab(16,botY+17,"gnd");
+    s+=lab(30,topY-7,"V")+lab(38,topY-8,"in","start","#8fa1b3",8);
+    s+=lab(252,topY-7,"V")+lab(260,topY-8,"out","start","#8fa1b3",8);
+    s+=leg(30)+leg(252);
+    s+=wire(57,midY,120,midY)+rbox(120,midY-14,60,28,"L")+wire(180,midY,279,midY);
+    s+=dot(57,midY)+dot(279,midY);
+  }
+  return s+'</svg>';
+}
+/* A/B numbers are hue-coded everywhere they appear side by side, so the blue
+   device and the orange device read instantly without hunting for labels. */
+function hue(slot,txt){ return '<span class="'+(slot==="A"?"ca":"cb")+'">'+txt+'</span>'; }
+function renderHero(A,B,c){
+  var ra=c.sharedN[0], rb=c.sharedN[1], fa=c.fom.A, fb=c.fom.B;
+  // Per-die silicon loss for the total-loss card's sub-line: the card's main
+  // value is the whole-bridge aggregate, this is the same per-die figure the
+  // hint line under the loss tables prints (die total / (positions x N)).
+  var nPos=nPositionsOf(ra), pdA=ra.die/(nPos*ra.N), pdB=rb.die/(nPos*rb.N);
+  var ta=ra.total, tb=rb.total, finite=isFinite(ta)&&isFinite(tb);
+  var tie=finite&&Math.abs(ta-tb)<1e-12, aw=finite&&ta<tb;
+  var d=Math.abs(ta-tb), dpct=(finite&&Math.max(ta,tb)>0)?100*d/Math.max(ta,tb):0;
+  var reA=fa.R_E, reB=fb.R_E;
+  var reTie=(reA!=null&&reB!=null&&Math.abs(reA-reB)<=1e-12*(1+Math.max(Math.abs(reA),Math.abs(reB))));
+  var reW=(reA!=null&&reB!=null&&!reTie)?(reA<reB?"A":"B"):null;
+  var reRatio=(reA!=null&&reB!=null&&Math.min(reA,reB)>0)?Math.max(reA,reB)/Math.min(reA,reB):null;
+  // Context for the loss numbers: how much power the FETs are actually passing,
+  // and what the loss costs in efficiency.  eff is semiconductor-only (die +
+  // loop ringing + driver), so it is labelled as such, never as converter eta.
+  var pout=(ra.derived&&ra.derived.Pout!=null)?ra.derived.Pout:null;
+  var effA=ra.eff, effB=rb.eff;
+  var effPt=(effA!=null&&effB!=null)?(effA-effB)*100:null;
+  function kpi(l,v,sub,cls,vsm){ return '<div class="kpi '+(cls||'')+'"><div class="v'+(vsm?' sm':'')+'">'+v+'</div>'+
+    '<div class="l">'+l+'</div>'+(sub?'<div class="s">'+sub+'</div>':'')+'</div>'; }
+  function bub(v,l,sub,cls){ return '<div class="bub'+(cls?' '+cls:'')+'"><div class="v">'+v+'</div>'+
+    '<div class="l">'+l+'</div>'+(sub?'<div class="s">'+sub+'</div>':'')+'</div>'; }
+  function pair(x,y){ return '<div class="kpi pair">'+x+y+'</div>'; }
+  var winSub = !finite?"check the inputs":tie?"identical":
+    (fmt(d,2)+" W better &middot; &minus;"+dpct.toFixed(0)+"%"+
+     (effPt==null?"":" &middot; &eta; +"+Math.abs(effPt).toFixed(2)+" pt"));
+  var fomSub = reW?("R&middot;E &mdash; "+(reW==="A"?esc(A.PN):esc(B.PN))+" better"):(reTie?"R&middot;E &mdash; tie":"R&middot;E");
+  var h="";
+  // Verdicts together, then the loss context together: four numbers in two
+  // paired cards, so the hero stays compact instead of seven stacked cards.
+  h+=pair(bub(!finite?"&mdash;":tie?"tie":hue(aw?"A":"B",esc(aw?A.PN:B.PN)), "Winner at this build", winSub,
+              (!finite||tie)?"":"win"),
+          bub(reRatio?reRatio.toFixed(1)+"&times;":"&mdash;", "Technology FOM", fomSub, reW?"win":""));
+  h+=pair(bub(pout==null?"&mdash;":fmt(pout,0)+" W", "Power switched",
+              "load power the FETs process &middot; P<sub>out</sub>"),
+          bub((effA==null||effB==null)?"&mdash;":hue("A",pct(effA))+" / "+hue("B",pct(effB)), "Efficiency (FETs)",
+              "A / B &middot; semiconductor-only, not converter &eta;"));
+  h+=kpi("Total FET loss", hue("A",fmt(ta,1))+" / "+hue("B",fmt(tb,1))+" W",
+         "A / B &middot; whole bridge &middot; per die (silicon) "+hue("A",fmt(pdA,2))+" / "+hue("B",fmt(pdB,2))+" W", "", true);
+  h+=kpi("Junction temp", hue("A",fmt(ra.Tj,0))+" / "+hue("B",fmt(rb.Tj,0))+" &deg;C", "A / B", "", true);
+  h+=kpi("Parallel count N<sub>opt</sub>", hue("A",fmt(fa.Nint,0))+" / "+hue("B",fmt(fb.Nint,0)), "A / B &middot; you set N="+S.NA+" / "+S.NB, "", true);
+  $("kpis").innerHTML=h;
+  $("topodiagram").innerHTML=topoSVG(S.topology,"#4aa3ff")+
+    '<div class="hint" style="text-align:center;margin:0 0 2px">'+TOPNAME[S.topology]+'</div>';
+}
+/* Takes the already-computed compare() result, because run() needs it for the
+   hero as well and converging the thermal loop twice is pure waste. */
+function renderResults(A,B,c){
+  var fA=c.fom.A,fB=c.fom.B, h="";
+  h+='<div class="plottools">'+
+     '<button class="tog" id="tjTog" data-tip="'+esc("Switch the whole breakdown between the self-heating solution and a fixed 25 C evaluation, which makes the cost of the thermal loop visible.")+'">'+
+     (S.tj==="converged"?"&#9673; Converged T<sub>j</sub> (self-heating)":"&#9675; 25 &deg;C (no self-heating)")+'</button>'+
+     '<span>Temperature mode &mdash; hover any underlined term for its definition and share of the budget.</span></div>';
+  // View 1 uses each device's own chosen N; it is only a "shared build" when the
+  // two counts happen to match.
+  h+='<div class="tbl-h">1. '+(S.NA===S.NB?"Shared build":"Your build")+
+     ' <span class="n">&mdash; '+(S.NA===S.NB?("both at N="+S.NA):("A at N="+S.NA+", B at N="+S.NB))+' &middot; whole-bridge totals</span></div>';
+  h+=lossTable(c.sharedN[0],c.sharedN[1],"Term [W] (whole bridge)",
+      A.PN+" @ "+fmt(effRail(A,"A"),1)+" V (N="+S.NA+")",
+      B.PN+" @ "+fmt(effRail(B,"B"),1)+" V (N="+S.NB+")");
+  h+='<div class="tbl-h">2. Each at its own N<sub>opt</sub> <span class="n">&mdash; removes the chosen-N design decision &middot; whole-bridge totals</span></div>';
+  h+=lossTable(c.eachOpt[0],c.eachOpt[1],"Term [W] (whole bridge)",
+      A.PN+" @ "+fmt(effRail(A,"A"),1)+" V (N="+fmt(c.Nopt.A,0)+")",
+      B.PN+" @ "+fmt(effRail(B,"B"),1)+" V (N="+fmt(c.Nopt.B,0)+")");
+  h+='<div class="tbl-h">3. N-invariant figures of merit</div>';
+  h+=fomTable(fA,fB,A.PN,B.PN);
+  h+='<details><summary>How to read this comparison</summary><div class="hint">'+
+     'R&middot;E is invariant to die area and to paralleling &mdash; (R/N)&middot;(E&middot;N) = R&middot;E &mdash; so view 3 compares the technology rather than a part number. '+
+     'N<sub>opt</sub> is the continuous minimiser of A/N + B&middot;N, rounded to the better integer neighbour; the rounding penalty is the quadratic-flatness cost, so 10% off the optimum costs about 0.5%. '+
+     'View 1 is the same build for both, view 2 lets each technology pick its own die count, and view 3 cannot be gamed by N at all.</div></details>';
+  $("results").innerHTML=h;
+  $("tjTog").addEventListener("click",function(){ S.tj=(S.tj==="converged"?"none":"converged"); run(); });
+}
+var WICO={critical:"\u26d4",caution:"\u26a0",info:"\u2139"};
+function renderWarnings(A,B){
+  var opts={tempMode:S.tj,cossBasis:S.op.cossBasis};
+  // Dedupe on the warning itself, not on the device: an identical warning raised
+  // by both A and B is ONE fact about the operating point, so it gets one card
+  // carrying both badges.  Printing it twice end to end read as a duplicated,
+  // overlapping block.
+  var order=[], byKey={};
+  [[A,"A"],[B,"B"]].forEach(function(pair){
+    var r=E.computeLosses(pair[0],S.op,pair[1]==="A"?S.NA:S.NB,Object.assign({},opts,{slot:pair[1]}));
+    r.warnings.forEach(function(w){
+      var key=w.code+"|"+w.title+"|"+w.detail;
+      if(!byKey[key]){ byKey[key]={w:w,devs:[]}; order.push(key); }
+      if(byKey[key].devs.indexOf(pair[1])<0) byKey[key].devs.push(pair[1]);
+    });
+  });
+  // NB: rank[critical] is 0, so a `|| 3` fallback would demote every critical
+  // warning to the bottom. Compare explicitly instead.
+  var rank={critical:0,caution:1,info:2};
+  function sevRank(s){ return Object.prototype.hasOwnProperty.call(rank,s) ? rank[s] : 3; }
+  order.sort(function(x,y){ return sevRank(byKey[x].w.severity)-sevRank(byKey[y].w.severity); });
+  var h=order.map(function(k){
+    var e=byKey[k], w=e.w, both=e.devs.length===2;
+    return '<div class="wcard sev-'+w.severity+'">'+
+      '<div class="whead"><span class="wico" data-tip="'+esc("Severity: "+w.severity)+'">'+(WICO[w.severity]||WICO.info)+'</span>'+
+      '<span class="wdev'+(both?' both':'')+'">'+e.devs.join('/')+'</span>'+
+      '<span class="wtitle">'+esc(w.title)+'</span></div>'+
+      '<div class="wbody">'+esc(w.detail)+'</div></div>';
+  }).join("");
+  if(!h) h='<div class="allok"><span class="ok">\u2713</span>No warnings for this operating point.</div>';
+  $("warns").innerHTML=h;
+}
+
+/* ------------------------------------------------------------------ plots */
+function svgLine(series,xlab,ylab,o){
+  o=o||{};
+  var logx=!!o.logx, vline=o.vline;
+  var w=580,h=210;
+  var secs = o.secondary ? (Object.prototype.toString.call(o.secondary)==="[object Array]" ? o.secondary : [o.secondary]) : [];
+  var hlines = o.hlines || [];
+  // A secondary (right-hand) axis needs room for its own tick labels.
+  var pad={l:60,r:(secs.length||hlines.length)?46:18,t:18,b:36};
+  var all=[], ys=[];
+  series.forEach(function(s){ s.pts.forEach(function(p){ all.push(p); ys.push(p.y); }); });
+  secs.forEach(function(s){ s.pts.forEach(function(p){ all.push(p); }); });
+  if(!all.length) return "";
+  var xs=all.map(function(p){return p.x;});
+  // Scale the y-axis from finite samples only, so a single Infinity/NaN loss
+  // cannot turn every coordinate into NaN.
+  var finY=ys.filter(function(v){ return isFinite(v); });
+  if(!finY.length) return '<p class="mut">No finite loss values to plot at this operating point.</p>';
+  var x0=Math.min.apply(null,xs),x1=Math.max.apply(null,xs);
+  if(x0===x1) x1=x0*1.001;
+  var y1=Math.max.apply(null,finY)*1.10; if(!(y1>0)) y1=1;
+  var X=logx?function(x){return pad.l+(Math.log(x)-Math.log(x0))/(Math.log(x1)-Math.log(x0))*(w-pad.l-pad.r);}
+              :function(x){return pad.l+(x-x0)/(x1-x0)*(w-pad.l-pad.r);};
+  var Y=function(y){return h-pad.b-(y/y1)*(h-pad.t-pad.b);};
+  var g='<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="xMidYMid meet">';
+  // A whisper of tint bounds the plot region so the eye finds the frame first
+  g+='<rect x="'+pad.l+'" y="'+pad.t+'" width="'+(w-pad.l-pad.r)+'" height="'+(h-pad.t-pad.b)+'" fill="#ffffff" fill-opacity="0.015"/>';
+  for(var i=0;i<=4;i++){ var yv=y1*i/4, y=Y(yv);
+    g+='<line x1="'+pad.l+'" y1="'+y+'" x2="'+(w-pad.r)+'" y2="'+y+'" stroke="#222b35"/>'+
+       '<text x="'+(pad.l-7)+'" y="'+(y+4)+'" fill="#8fa1b3" font-size="11" text-anchor="end">'+fmt(yv,1)+'</text>'; }
+  var ticks=logx?[0,0.25,0.5,0.75,1]:[0,1/3,2/3,1];
+  ticks.forEach(function(fr){
+    var xv=logx?Math.exp(Math.log(x0)+fr*(Math.log(x1)-Math.log(x0))):x0+fr*(x1-x0);
+    g+='<text x="'+X(xv)+'" y="'+(h-13)+'" fill="#8fa1b3" font-size="11" text-anchor="middle">'+(xv>=1000?fmt(xv/1000,0)+"k":fmt(xv,0))+'</text>';
+  });
+  // axis frame: left + bottom only, one step above the grid
+  g+='<path d="M'+pad.l+' '+pad.t+' V'+(h-pad.b)+' H'+(w-pad.r)+'" fill="none" stroke="#33404e" stroke-width="1"/>';
+  if(vline&&vline>0){
+    var vx=X(vline);
+    if(isFinite(vx)&&vx>=pad.l-1&&vx<=w-pad.r+1){
+      g+='<line x1="'+vx+'" y1="'+pad.t+'" x2="'+vx+'" y2="'+(h-pad.b)+'" stroke="#4aa3ff" stroke-width="1.3" stroke-dasharray="4 3"/>'+
+         '<text x="'+(vx+4)+'" y="'+(pad.t+11)+'" fill="#4aa3ff" font-size="11">'+esc(o.vlineLabel||"")+'</text>';
+    }
+  }
+  // Per-device reference lines: A and B may sit at different parallel counts, so
+  // each gets its own hue, and the labels are stacked so they cannot overprint.
+  (o.vlines||[]).forEach(function(v,i){
+    if(!(v.x>0)) return;
+    var lx=X(v.x);
+    if(!isFinite(lx)||lx<pad.l-1||lx>w-pad.r+1) return;
+    var col=v.color||"#4aa3ff";
+    g+='<line x1="'+lx+'" y1="'+pad.t+'" x2="'+lx+'" y2="'+(h-pad.b)+'" stroke="'+col+'" stroke-width="1.3" stroke-dasharray="4 3"/>'+
+       '<text x="'+(lx+4)+'" y="'+(pad.t+11+i*12)+'" fill="'+col+'" font-size="11">'+esc(v.label||"")+'</text>';
+  });
+  // --- secondary axis: junction temperature and its limits ------------------
+  var sv=[];
+  secs.forEach(function(s){ s.pts.forEach(function(p){ if(isFinite(p.y)) sv.push(p.y); }); });
+  hlines.forEach(function(hh){ if(isFinite(hh.y)) sv.push(hh.y); });
+  var y1s = sv.length ? Math.max.apply(null,sv)*1.12 : 0; if(!(y1s>0)) y1s=1;
+  var Y2=function(y){ return h-pad.b-(y/y1s)*(h-pad.t-pad.b); };
+  if(sv.length){
+    for(var sk=0; sk<=4; sk++){ var svv=y1s*sk/4;
+      g+='<text x="'+(w-pad.r+5)+'" y="'+(Y2(svv)+4)+'" fill="#e08f8f" font-size="10" text-anchor="start">'+fmt(svv,0)+'</text>'; }
+    g+='<text x="'+(w-pad.r+5)+'" y="'+(pad.t-5)+'" fill="#e08f8f" font-size="10" text-anchor="start">'+esc(o.secondaryLabel||"")+'</text>';
+  }
+  hlines.forEach(function(hh){
+    if(!isFinite(hh.y)) return;
+    var hy=Y2(hh.y);
+    g+='<line x1="'+pad.l+'" y1="'+hy+'" x2="'+(w-pad.r)+'" y2="'+hy+'" stroke="'+hh.color+'" stroke-width="1.2" stroke-dasharray="7 4"/>'+
+       '<text x="'+(pad.l+5)+'" y="'+(hy-4)+'" fill="'+hh.color+'" font-size="10">'+esc(hh.label||"")+'</text>';
+  });
+  secs.forEach(function(sc){
+    var sseg=[];
+    function sflush(){ if(!sseg.length) return;
+      g+='<path d="'+sseg.join(" ")+'" fill="none" stroke="'+sc.color+'" stroke-width="1.6" stroke-dasharray="5 3"/>'; sseg=[]; }
+    sc.pts.forEach(function(p){
+      if(!isFinite(p.x)||!isFinite(p.y)){ sflush(); return; }
+      sseg.push((sseg.length?"L":"M")+X(p.x).toFixed(1)+" "+Y2(p.y).toFixed(1));
+    });
+    sflush();
+  });
+
+  series.forEach(function(s,si){
+    // Split the polyline at non-finite samples; a dropped point breaks the line
+    // rather than emitting an "L NaN NaN" segment.
+    var seg=[], segX0=null, segX1=null;
+    function flushSeg(){
+      if(!seg.length) return;
+      // A gradient fill under the curve gives the trace depth without a third
+      // hue; the stroke is drawn over it so the line stays crisp.
+      if(o.area){
+        var base=(h-pad.b).toFixed(1);
+        g+='<defs><linearGradient id="'+o.area+si+'" x1="0" y1="0" x2="0" y2="1">'+
+           '<stop offset="0" stop-color="'+s.color+'" stop-opacity="0.18"/>'+
+           '<stop offset="1" stop-color="'+s.color+'" stop-opacity="0"/></linearGradient></defs>';
+        g+='<path d="'+seg.join(" ")+'L'+segX1+' '+base+' L'+segX0+' '+base+' Z" fill="url(#'+o.area+si+')" stroke="none"/>';
+      }
+      g+='<path d="'+seg.join(" ")+'" fill="none" stroke="'+s.color+'" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>';
+      seg=[];
+    }
+    s.pts.forEach(function(p){
+      if(!isFinite(p.x)||!isFinite(p.y)){ flushSeg(); return; }
+      var px=X(p.x).toFixed(1);
+      if(!seg.length) segX0=px;
+      segX1=px;
+      seg.push((seg.length?"L":"M")+px+" "+Y(p.y).toFixed(1));
+    });
+    flushSeg();
+    if(s.mark&&isFinite(s.mark.x)&&isFinite(s.mark.y)){
+      var mx=X(s.mark.x), my=Y(s.mark.y);
+      var dy=(s.mark.dy==null?-9:s.mark.dy);
+      // keep the label inside the plot box so it cannot collide with the axis ticks
+      var lx=Math.max(pad.l+18,Math.min(w-pad.r-18,mx));
+      // A pill behind the label, so it stays legible over the curve it labels
+      // rather than relying on a text halo alone.
+      var lw=String(s.mark.label).length*7+12;
+      g+='<rect x="'+(lx-lw/2).toFixed(1)+'" y="'+(my+dy-11)+'" width="'+lw+'" height="15" rx="7.5" '+
+         'fill="'+BGCOL+'" fill-opacity="0.88" stroke="'+s.color+'" stroke-width="0.9"/>'+
+         '<circle cx="'+mx+'" cy="'+my+'" r="4" fill="'+s.color+'" stroke="'+BGCOL+'" stroke-width="1.5"/>'+
+         '<text x="'+lx+'" y="'+(my+dy)+'" fill="'+s.color+'" font-size="11" text-anchor="middle" '+
+         'stroke="'+BGCOL+'" stroke-width="3.5" paint-order="stroke" stroke-linejoin="round">'+s.mark.label+'</text>';
+    }
+  });
+  g+='<text x="'+(pad.l+(w-pad.l-pad.r)/2)+'" y="'+(h-1)+'" fill="#8fa1b3" font-size="11" text-anchor="middle">'+xlab+'</text>';
+  g+='<text x="12" y="'+(h/2)+'" fill="#8fa1b3" font-size="11" text-anchor="middle" transform="rotate(-90 12 '+(h/2)+')">'+ylab+'</text>';
+  return g+'</svg>';
+}
+/* Junction temperature vs N, on its own axis.  Kept separate from the loss
+   chart: on a shared plot a single runaway point set the secondary scale to
+   1262 C, squashing every real curve and looking like a scaling bug.  Values
+   above yCap are clamped to the top edge, so an unfeasible curve flat-lines
+   visibly instead of dictating the axis. */
+function svgTj(curves,limits,o){
+  o=o||{};
+  var w=580,h=190,pad={l:60,r:18,t:14,b:34};
+  var pts=[]; curves.forEach(function(c){ c.pts.forEach(function(p){ pts.push(p); }); });
+  if(!pts.length) return "";
+  var xs=pts.map(function(p){return p.x;});
+  var x0=Math.min.apply(null,xs), x1=Math.max.apply(null,xs);
+  if(x0===x1) x1=x0*1.001;
+  var fin=pts.map(function(p){return p.y;}).filter(function(v){return isFinite(v);});
+  if(!fin.length) return '<p class="mut">No finite junction temperatures at this operating point.</p>';
+  var limMax=Math.max.apply(null,limits.map(function(l){return l.y;}));
+  var yCap=o.yCap||limMax*1.2;
+  var yMax=Math.min(Math.max(Math.max.apply(null,fin)*1.08, limMax*1.15), yCap);
+  if(!(yMax>0)) yMax=1;
+  var X=function(x){ return pad.l+(x-x0)/(x1-x0)*(w-pad.l-pad.r); };
+  var Y=function(y){ return h-pad.b-(Math.min(y,yMax)/yMax)*(h-pad.t-pad.b); };
+  var g='<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="xMidYMid meet">';
+  g+='<rect x="'+pad.l+'" y="'+pad.t+'" width="'+(w-pad.l-pad.r)+'" height="'+(h-pad.t-pad.b)+'" fill="#ffffff" fill-opacity="0.015"/>';
+  for(var i=0;i<=4;i++){ var yv=yMax*i/4, y=Y(yv);
+    g+='<line x1="'+pad.l+'" y1="'+y+'" x2="'+(w-pad.r)+'" y2="'+y+'" stroke="#222b35"/>'+
+       '<text x="'+(pad.l-7)+'" y="'+(y+4)+'" fill="#8fa1b3" font-size="11" text-anchor="end">'+fmt(yv,0)+'</text>'; }
+  [0,1/3,2/3,1].forEach(function(fr){ var xv=x0+fr*(x1-x0);
+    g+='<text x="'+X(xv)+'" y="'+(h-13)+'" fill="#8fa1b3" font-size="11" text-anchor="middle">'+fmt(xv,0)+'</text>'; });
+  g+='<path d="M'+pad.l+' '+pad.t+' V'+(h-pad.b)+' H'+(w-pad.r)+'" fill="none" stroke="#33404e" stroke-width="1"/>';
+  if(o.vline&&o.vline>0){ var vx=X(o.vline);
+    if(isFinite(vx)&&vx>=pad.l-1&&vx<=w-pad.r+1)
+      g+='<line x1="'+vx+'" y1="'+pad.t+'" x2="'+vx+'" y2="'+(h-pad.b)+'" stroke="#4aa3ff" stroke-width="1.3" stroke-dasharray="4 3"/>'+
+         '<text x="'+(vx+4)+'" y="'+(pad.t+11)+'" fill="#4aa3ff" font-size="11">'+esc(o.vlineLabel||"")+'</text>'; }
+  (o.vlines||[]).forEach(function(v,i){
+    if(!(v.x>0)) return;
+    var lx=X(v.x);
+    if(!isFinite(lx)||lx<pad.l-1||lx>w-pad.r+1) return;
+    var col=v.color||"#4aa3ff";
+    g+='<line x1="'+lx+'" y1="'+pad.t+'" x2="'+lx+'" y2="'+(h-pad.b)+'" stroke="'+col+'" stroke-width="1.3" stroke-dasharray="4 3"/>'+
+       '<text x="'+(lx+4)+'" y="'+(pad.t+11+i*12)+'" fill="'+col+'" font-size="11">'+esc(v.label||"")+'</text>';
+  });
+  // limits: thin dotted in the device hue, and deliberately unlabelled in the
+  // plot -- the legend names them, which is what the reviewer asked for.
+  limits.forEach(function(L){
+    if(!isFinite(L.y)) return;
+    var ly=Y(L.y);
+    g+='<line x1="'+pad.l+'" y1="'+ly+'" x2="'+(w-pad.r)+'" y2="'+ly+'" stroke="'+L.color+'" stroke-width="1.3" stroke-dasharray="2 3" opacity="0.8"/>';
+  });
+  curves.forEach(function(c){
+    var seg=[];
+    function flush(){ if(!seg.length) return; g+='<path d="'+seg.join(" ")+'" fill="none" stroke="'+c.color+'" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>'; seg=[]; }
+    c.pts.forEach(function(p){
+      if(!isFinite(p.x)||!isFinite(p.y)){ flush(); return; }
+      seg.push((seg.length?"L":"M")+X(p.x).toFixed(1)+" "+Y(p.y).toFixed(1));
+    });
+    flush();
+  });
+  g+='<text x="'+(pad.l+(w-pad.l-pad.r)/2)+'" y="'+(h-1)+'" fill="#8fa1b3" font-size="11" text-anchor="middle">dice / ICs in parallel per position, N</text>';
+  // NB: no HTML tags inside SVG <text>.  <sub> is not an SVG element, so the
+  // parser closes the <svg> early and hoists the tail into the page as stray
+  // overlapping text -- which is exactly how it looked.
+  g+='<text x="12" y="'+(h/2)+'" fill="#8fa1b3" font-size="11" text-anchor="middle" transform="rotate(-90 12 '+(h/2)+')">Tj [\u00b0C]</text>';
+  return g+'</svg>';
+}
+/* A perceptual, multi-hue ramp (viridis-style): lightness rises with loss, so
+   the valley reads dark and the hot corner reads bright on any display, and
+   the ordering survives even for the colour-blind.  The old blue->red hsl
+   sweep folded the middle of the range into near-identical greys. */
+var HEATRAMP=[[68,1,84],[72,40,120],[62,74,137],[49,104,142],[38,130,142],[31,158,137],[53,183,121],[93,205,96],[140,213,74],[190,220,51],[253,231,37]];
+function heatColor(t){
+  t=Math.max(0,Math.min(1,t));
+  var n=HEATRAMP.length-1, i=Math.min(n-1,Math.floor(t*n)), f=t*n-i;
+  return "rgb("+[0,1,2].map(function(k){ return Math.round(HEATRAMP[i][k]+(HEATRAMP[i+1][k]-HEATRAMP[i][k])*f); }).join(",")+")";
+}
+function svgHeat(rows,Ns,fsws){
+  var w=580, x0=48, y0=5, gridW=470;
+  var cell=Math.max(11,Math.floor(gridW/fsws.length)), gw=cell*fsws.length;
+  var max=0; rows.forEach(function(r){r.forEach(function(v){if(isFinite(v)&&v>max)max=v;});}); if(max<=0)max=1;
+  var h=y0+Ns.length*18+88;
+  var g='<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="xMidYMid meet">',i,j;
+  for(i=0;i<Ns.length;i++){
+    var y=y0+i*18, cur=(Ns[i]===S.NA);
+    g+='<text x="'+(x0-8)+'" y="'+(y+13)+'" fill="'+(cur?"#e8eef5":"#8fa1b3")+'" font-size="11" text-anchor="end">N='+Ns[i]+'</text>';
+    if(cur) g+='<rect x="'+(x0-3)+'" y="'+(y-2)+'" width="'+(gw+6)+'" height="19" rx="3" fill="none" stroke="#4aa3ff" stroke-width="1.2"/>';
+    for(j=0;j<fsws.length;j++){
+      var v=rows[i][j], ok=isFinite(v), t=ok?Math.max(0,Math.min(1,v/max)):0;
+      var sel=(S.heatSel&&S.heatSel.i===i&&S.heatSel.j===j);
+      // A non-finite total (e.g. a diverged case) gets a neutral swatch rather
+      // than a colour ramp at NaN, which some renderers silently drop.
+      // data-tip, not an SVG <title>: that is still a native tooltip, and native
+      // tooltips are the ones that clip into a stub.
+      g+='<rect data-i="'+i+'" data-j="'+j+'" x="'+(x0+j*cell)+'" y="'+y+'" width="'+(cell-1)+'" height="17" rx="2" '+
+         'data-tip="'+esc("N="+Ns[i]+", f="+fmt(fsws[j],0)+" Hz: "+(ok?fmt(v,2)+" W":"no finite loss"))+'" '+
+         'fill="'+(ok?heatColor(t):'#232c37')+'" stroke="'+(sel?"#e8eef5":"none")+'" stroke-width="'+(sel?1.6:0)+'"></rect>';
+    }
+  }
+  var axisY=y0+Ns.length*18+13;
+  g+='<text x="'+x0+'" y="'+axisY+'" fill="#8fa1b3" font-size="11">'+fmt(fsws[0],0)+' Hz</text>';
+  g+='<text x="'+(x0+gw)+'" y="'+axisY+'" fill="#8fa1b3" font-size="11" text-anchor="end">'+fmt(fsws[fsws.length-1],0)+' Hz</text>';
+  // colour bar, so a cell colour can be read as a wattage without hovering every cell
+  var cbY=axisY+10, cbH=11;
+  var defs='<defs><linearGradient id="cbg" x1="0" y1="0" x2="1" y2="0">';
+  for(var k=0;k<=10;k++){ var tt=k/10;
+    defs+='<stop offset="'+(tt*100)+'%" stop-color="'+heatColor(tt)+'"/>'; }
+  defs+='</linearGradient></defs>';
+  g+=defs+'<rect x="'+x0+'" y="'+cbY+'" width="'+gw+'" height="'+cbH+'" rx="2" fill="url(#cbg)" stroke="#232c37"/>';
+  [0,0.25,0.5,0.75,1].forEach(function(fr){
+    g+='<text x="'+(x0+fr*gw)+'" y="'+(cbY+cbH+13)+'" fill="#8fa1b3" font-size="10" text-anchor="middle">'+fmt(fr*max,1)+'</text>';
+  });
+  // Explicit end labels with units, so the bar reads as a scale rather than a
+  // decorative gradient.
+  g+='<text x="'+x0+'" y="'+(cbY+cbH+27)+'" fill="#e8eef5" font-size="11" text-anchor="start">0 W</text>';
+  g+='<text x="'+(x0+gw)+'" y="'+(cbY+cbH+27)+'" fill="#e8eef5" font-size="11" text-anchor="end">'+fmt(max,1)+' W</text>';
+  g+='<text x="'+(x0+gw/2)+'" y="'+(cbY+cbH+27)+'" fill="#8fa1b3" font-size="10" text-anchor="middle">whole-bridge FET loss, device A</text>';
+  return g+'</svg>';
+}
+function renderPlots(A,B){
+  var opts={tempMode:S.tj,cossBasis:S.op.cossBasis};
+  var optsA=Object.assign({},opts,{slot:"A"}), optsB=Object.assign({},opts,{slot:"B"});
+  // A blank or zero fsw would otherwise give an inverted/zero sweep range and a
+  // log axis full of NaN; fall back to a sane band instead.
+  var fsw0=(isFinite(S.op.fsw)&&S.op.fsw>0)?S.op.fsw:40000;
+  var f0=Math.max(1000,fsw0*0.2), f1=fsw0*5;
+  var swA=E.sweepFsw(A,S.op,S.NA,f0,f1,48,optsA), swB=E.sweepFsw(B,S.op,S.NB,f0,f1,48,optsB);
+  // Device identity, not technology: A is always blue and B always orange, here
+  // and in the table bars and winner tags alike.
+  var cA="#4aa3ff", cB="#ff9f43";
+  // No "minimum" marker on this chart.  With FET losses only, loss is monotonic
+  // in fsw, so the lowest point is always the left edge of the swept band; a dot
+  // there would imply an interior optimum that does not exist until the passive,
+  // EMI and thermal costs this tool excludes are added.
+  var ser=[{color:cA,pts:swA.points.map(function(p){return{x:p.fsw,y:p.r.total};})},
+           {color:cB,pts:swB.points.map(function(p){return{x:p.fsw,y:p.r.total};})}];
+  $("plottools").innerHTML='<label for="logf"><input type="checkbox" id="logf"'+(S.logf!==false?' checked':'')+'> log frequency axis</label>'+
+    '<span>dashed line marks your f<sub>sw</sub> = '+fmt(S.op.fsw/1e3,0)+' kHz</span>';
+  $("logf").addEventListener("change",function(){ S.logf=this.checked; run(); });
+  $("plotfsw").innerHTML=svgLine(ser,"switching frequency [Hz]","whole-bridge FET loss [W]",
+      {logx:S.logf!==false, vline:S.op.fsw, vlineLabel:"your fsw", area:"ga"})+
+    '<div class="legend"><span><span class="swatch" style="background:'+cA+'"></span>'+esc(A.PN)+'</span>'+
+    '<span><span class="swatch" style="background:'+cB+'"></span>'+esc(B.PN)+'</span>'+
+    '<span>loss rises monotonically with f<sub>sw</sub> &mdash; there is no interior optimum without the passive, EMI and thermal costs this tool excludes</span></div>';
+
+  // Enough N to show both optima, but bounded so the sweep stays cheap.
+  var nmax=12;
+  [E.fomMetrics(A,S.op,S.NA,null,"A").Nopt,E.fomMetrics(B,S.op,S.NB,null,"B").Nopt].forEach(function(nc){
+    if(isFinite(nc)&&Math.ceil(nc*1.5)>nmax) nmax=Math.ceil(nc*1.5);
+  });
+  nmax=Math.min(nmax,40);
+  var onA=E.optimizeN(A,S.op,optsA,nmax), onB=E.optimizeN(B,S.op,optsB,nmax);
+  // A single shared "your N" when the counts match, otherwise one dashed line per
+  // device in that device's hue, so "4 GaN vs 2 Si" is visible on the N charts.
+  var nMark=(S.NA===S.NB) ? {vline:S.NA, vlineLabel:"your N"}
+    : {vlines:[{x:S.NA,color:cA,label:"A: N="+S.NA},{x:S.NB,color:cB,label:"B: N="+S.NB}]};
+  // Right-hand axis: junction temperature for each device, with its own limit
+  // dashed in.  This is the feasibility frontier -- past the crossing the device
+  // is outside its rating and the loss comparison stops meaning anything.
+  // Loss and junction temperature are two stacked charts now.  Sharing one plot
+  // meant a runaway point dictated the Tj scale, and the limit annotations had to
+  // fight the loss curves for space.
+  var tjA=onA.curve.map(function(p){return{x:p.N,y:p.Tj};});
+  var tjB=onB.curve.map(function(p){return{x:p.N,y:p.Tj};});
+  $("plotn").innerHTML=svgLine(
+    [{color:cA,pts:onA.curve.map(function(p){return{x:p.N,y:p.total};}),mark:{x:onA.Nbest,y:onA.best,label:"N="+onA.Nbest,dy:-11}},
+     {color:cB,pts:onB.curve.map(function(p){return{x:p.N,y:p.total};}),mark:{x:onB.Nbest,y:onB.best,label:"N="+onB.Nbest,dy:19}}],
+    "dice / ICs in parallel per position, N","whole-bridge FET loss [W]",
+    Object.assign({logx:false,area:"gn"},nMark))+
+    '<div class="legend"><span><span class="swatch" style="background:'+cA+'"></span>'+esc(A.PN)+' loss, best N='+onA.Nbest+'</span>'+
+    '<span><span class="swatch" style="background:'+cB+'"></span>'+esc(B.PN)+' loss, best N='+onB.Nbest+'</span></div>';
+  var tjCap=Math.max(A.TjMax,B.TjMax)*1.2;
+  var clipped=onA.curve.concat(onB.curve).some(function(p){ return isFinite(p.Tj)&&p.Tj>tjCap; });
+  $("plottj").innerHTML=svgTj(
+    [{color:cA,pts:tjA},{color:cB,pts:tjB}],
+    [{y:A.TjMax,color:cA},{y:B.TjMax,color:cB}],
+    Object.assign({yCap:tjCap},nMark))+
+    '<div class="legend">'+
+    '<span><span class="swatch" style="background:'+cA+'"></span>'+esc(A.PN)+' T<sub>j</sub></span>'+
+    '<span><span class="swatch" style="background:'+cB+'"></span>'+esc(B.PN)+' T<sub>j</sub></span>'+
+    '<span>dotted = each part&rsquo;s limit ('+A.TjMax+' / '+B.TjMax+' &deg;C)</span>'+
+    (clipped?'<span>axis clipped at '+fmt(tjCap,0)+' &deg;C &mdash; a curve pegged to the top is unfeasible, not merely hot</span>':'')+
+    '</div>';
+
+  var Ns=[]; for(var n=1;n<=Math.min(12,nmax);n++) Ns.push(n);
+  var fs=[]; for(var k=0;k<24;k++) fs.push(f0*Math.pow(f1/f0,k/23));
+  drawHeat(E.sweepHeatmap(A,S.op,Ns,fs,optsA),Ns,fs,A);
+  $("heathint").innerHTML='Whole-bridge total FET loss for <b>'+esc(A.PN)+'</b> in W, on the colour scale bar under the grid. The outlined row is your N='+S.NA+
+    '. The dark valley is the optimum, which runs as N<sub>opt</sub> &prop; 1/&radic;f<sub>sw</sub> &mdash; a curve through the plane, not a point. '+
+    'Hover a cell for a tooltip, or <b>click one</b> to pin its value.';
+}
+/* Redraws only the map, so pinning a cell does not re-run the sweeps. */
+function drawHeat(rows,Ns,fs,A){
+  function show(){
+    var ro=$("heatread"); if(!ro) return;
+    if(!S.heatSel){ ro.innerHTML='<span class="mut">Click or tap a cell to pin its exact value here.</span>'; return; }
+    var i=S.heatSel.i, j=S.heatSel.j;
+    // The grid can be rebuilt at a different size, so drop a stale pin rather
+    // than reading past the end of the new rows.
+    if(!rows[i]||rows[i][j]===undefined){ S.heatSel=null; ro.innerHTML='<span class="mut">Click or tap a cell to pin its exact value here.</span>'; return; }
+    ro.innerHTML='Pinned: <b>N='+Ns[i]+'</b> at <b>'+fmt(fs[j],0)+' Hz</b> &rarr; <b>'+fmt(rows[i][j],2)+' W</b> whole-bridge FET loss for '+esc(A.PN)+'.';
+  }
+  $("heat").innerHTML=svgHeat(rows,Ns,fs);
+  var svg=$("heat").querySelector("svg");
+  if(svg) svg.addEventListener("click",function(ev){
+    var t=ev.target;
+    if(!t||!t.dataset||t.dataset.i==null) return;
+    S.heatSel={i:parseInt(t.dataset.i,10),j:parseInt(t.dataset.j,10)};
+    drawHeat(rows,Ns,fs,A);
+  });
+  show();
+}
+
+/* ------------------------------------------------------------------- lib */
+function download(name,text){
+  var b=new Blob([text],{type:"application/json"}),u=URL.createObjectURL(b),a=document.createElement("a");
+  a.href=u; a.download=name; document.body.appendChild(a); a.click(); a.remove();
+  // Guarded because a DOM without the object-URL API (e.g. a test harness) would
+  // otherwise throw from this timer long after the click that started it.
+  setTimeout(function(){ if(URL.revokeObjectURL) URL.revokeObjectURL(u); },1500);
+}
+function renderLib(){
+  $("lib").innerHTML=
+    '<div class="row3"><button id="exp">Export library</button><button id="impBtn">Import</button><button id="link">Copy link</button></div>'+
+    '<input id="imp" type="file" accept=".json,application/json" style="display:none">'+
+    '<div class="row"><button id="expScen">Save scenario</button><button id="addPart">New part</button></div>'+
+    '<div class="hint">"Export library" writes <code>{schemaVersion:'+E.schemaVersion+', parts:{...}}</code>; "Save scenario" writes the operating point and device selection alone. Import accepts either and refuses a version this build does not know. "Copy link" puts the same scenario in the URL hash &mdash; nothing ever leaves the page.</div>'+
+    '<div class="row"><button id="resetLib">Reset page</button></div>';
+  $("exp").addEventListener("click",function(){
+    download("fet_fom_parts.json",JSON.stringify({schemaVersion:E.schemaVersion,exported:new Date().toISOString(),parts:E.PARTS},null,1));
+  });
+  $("expScen").addEventListener("click",function(){
+    saveHash();
+    download("fet_fom_scenario.json",JSON.stringify(scenarioObj(),null,1));
+  });
+  $("impBtn").addEventListener("click",function(){ $("imp").click(); });
+  $("imp").addEventListener("change",function(){
+    var inp=this, f=inp.files[0]; if(!f) return;
+    var rd=new FileReader();
+    rd.onload=function(){
+      // Clear the picker so choosing the same filename again still fires change.
+      inp.value="";
+      try{
+        var d=JSON.parse(rd.result);
+        if(d.schemaVersion!==E.schemaVersion){ alert("schemaVersion "+d.schemaVersion+" is not supported by this build (expected "+E.schemaVersion+")."); return; }
+        if(d.kind==="scenario"){ applyScenario(d); run(); alert("Scenario loaded."); return; }
+        if(!d.parts||typeof d.parts!=="object"||Array.isArray(d.parts)){ alert("Neither a parts library nor a scenario."); return; }
+        var n=0; Object.keys(d.parts).forEach(function(pn){ E.PARTS[pn]=d.parts[pn]; n++; });
+        if(!E.PARTS[S.A]) S.A=Object.keys(E.PARTS)[0];
+        if(!E.PARTS[S.B]) S.B=Object.keys(E.PARTS)[1];
+        renderDevs(); renderForm(); run(); alert("Imported "+n+" parts.");
+      }catch(e){ alert("Import failed: "+e.message); }
+    };
+    rd.readAsText(f);
+  });
+  $("link").addEventListener("click",function(){
+    saveHash();
+    var t=location.href;
+    if(navigator.clipboard) navigator.clipboard.writeText(t).then(function(){ $("link").textContent="Copied"; setTimeout(function(){$("link").textContent="Copy link";},1200); },
+      function(){ prompt("Copy this link:",t); });
+    else prompt("Copy this link:",t);
+  });
+  $("resetLib").addEventListener("click",function(){
+    // The page writes its state into the URL on every run, so a plain reload
+    // would restore the edited state, not the defaults.  Drop the share-link
+    // hash first so this really does open on the seeded library and the default
+    // scenario again.
+    if(confirm("Reload the page to restore the fourteen seeded parts and the default scenario?")){
+      try{ history.replaceState(null,"",location.pathname+location.search); }
+      catch(e){ location.hash=""; }
+      location.reload();
+    }
+  });
+  $("addPart").addEventListener("click",function(){
+    var pn=prompt("New part number:"); if(!pn) return;
+    E.PARTS[pn]={PN:pn,vendor:"?",technology:"Si",kind:"discrete",Rdson25:0.005,RdsonMax:null,IdcRating:null,BVdss:100,VgsRec:10,kTperC:0.008,Vth:3,Vpt:5,Qg:2e-8,Qgd:5e-9,Qgs:8e-9,Qgth:5e-9,Qoss:3e-8,QossVref:50,qossExp:0.5,Qrr:5e-8,qrrExp:0,CSI:3e-10,Isd:[10,50],Vsd:[0.7,0.85],Vsd0:null,Eoss:null,EossVref:null,tsw:null,eiRef:null,eiVref:null,Qdrv:null,Iq:null,Vcc:null,RthJC:1,RthCA:10,RthSink:0,tauDead:4e-8,est:["kTperC","RthJC","RthCA"],notes:"user-defined template"};
+    S.A=pn; renderDevs(); editPart(pn);
+  });
+}
+function editPart(pn){
+  $("editor").innerHTML='<label for="pjson">Edit '+esc(pn)+' (JSON, per-die / per-IC raw values)</label>'+
+    '<textarea id="pjson" rows="14" spellcheck="false">'+esc(JSON.stringify(E.PARTS[pn],null,1))+'</textarea>'+
+    '<div class="row"><button id="psave" class="primary">Save part</button><button id="pcancel">Cancel</button></div><div id="perr" class="bad"></div>';
+  $("psave").addEventListener("click",function(){
+    try{ var o=JSON.parse($("pjson").value);
+      if(!o.PN) throw new Error("PN is required");
+      E.PARTS[pn]=o; if(o.PN!==pn){ delete E.PARTS[pn]; E.PARTS[o.PN]=o; if(S.A===pn)S.A=o.PN; if(S.B===pn)S.B=o.PN; }
+      renderDevs(); run();
+    }catch(e){ $("perr").textContent=e.message; }
+  });
+  $("pcancel").addEventListener("click",function(){ $("editor").innerHTML=""; });
+}
+function renderDevs(){
+  var opts=Object.keys(E.PARTS).map(function(pn){ var p=E.PARTS[pn];
+    return '<option value="'+esc(pn)+'">'+esc(pn)+' &mdash; '+esc(p.technology)+', '+esc(p.kind)+', '+(p.Rdson25*1e3).toFixed(2)+' m&Omega;</option>';}).join("");
+  $("devs").innerHTML='<label for="selA"><span class="devdot a"></span>Device A</label><select id="selA">'+opts+'</select>'+
+    '<label for="selB"><span class="devdot b"></span>Device B</label><select id="selB">'+opts+'</select>'+
+    '<div class="row3"><button id="editA">Edit A</button><button id="editB">Edit B</button><button id="dupA">Duplicate A</button></div>'+
+    '<div class="hint" id="devhint"></div><div id="editor"></div>';
+  $("selA").value=S.A; $("selB").value=S.B;
+  // Re-render the form on a device swap so each gate-drive field's placeholder
+  // reflects the newly selected part's recommended rail.
+  $("selA").addEventListener("change",function(){ S.A=this.value; readForm(); renderForm(); run(); });
+  $("selB").addEventListener("change",function(){ S.B=this.value; readForm(); renderForm(); run(); });
+  $("editA").addEventListener("click",function(){ editPart(S.A); });
+  $("editB").addEventListener("click",function(){ editPart(S.B); });
+  $("dupA").addEventListener("click",function(){
+    var pn=prompt("Copy "+S.A+" as:",S.A+"_copy"); if(!pn) return;
+    E.PARTS[pn]=JSON.parse(JSON.stringify(E.PARTS[S.A])); E.PARTS[pn].PN=pn;
+    S.B=pn; renderDevs(); renderForm(); run();
+  });
+  $("devhint").innerHTML=devHintHTML();
+}
+function devHintHTML(){
+  var a=E.PARTS[S.A], b=E.PARTS[S.B];
+  if(!a||!b) return "";
+  function tags(p){ return (p.est&&p.est.length?'<span class="tag est">'+p.est.length+' estimate'+(p.est.length>1?'s':'')+'</span>':''); }
+  // Provenance notes are long; leaving them open turned this panel into a wall
+  // of grey text immediately above the Warnings panel.
+  function side(p,letter){
+    var req=E.gateFor(p,S.op,letter).Vdrv, rail=effRail(p,letter);
+    return '<div style="margin-top:5px"><b>'+esc(p.PN)+'</b> '+
+      '<span class="tag '+(p.technology==="Si"?"si":"gan")+'">'+esc(p.technology)+'</span> '+tags(p)+
+      ' <span class="mut">'+(p.kind==="bridge"?letter+": integrated half-bridge":letter+": discrete, external gate")+
+      ' &middot; V<sub>drv</sub> '+fmt(rail,1)+' V'+(Math.abs(rail-req)>1e-9?' (auto, requested '+fmt(req,1)+' V)':'')+
+      '</span></div>'+
+      '<details><summary>provenance</summary><div class="hint">'+esc(p.notes||"")+'</div></details>';
+  }
+  return side(a,"A")+side(b,"B");
+}
+
+/* -------------------------------------------------------------------- run */
+var raf=null;
+function run(){
+  readForm(); readAdv();
+  if(!E.PARTS[S.A]||!E.PARTS[S.B]) return;
+  var opts={tempMode:S.tj,cossBasis:S.op.cossBasis};
+  var A=E.PARTS[S.A], B=E.PARTS[S.B];
+  try{
+    // One compare() feeds the hero and the tables; it converges the thermal loop
+    // four times, so computing it twice per keystroke was pure waste.
+    var c=E.compare(A,B,S.op,{A:S.NA,B:S.NB},opts);
+    renderHero(A,B,c);
+    renderResults(A,B,c);
+    renderWarnings(A,B);
+    renderPlots(A,B);
+    renderDevHint();
+    saveHash();
+  }catch(e){
+    $("results").innerHTML='<p class="bad">'+esc(e.message)+'</p>';
+  }
+}
+function renderDevHint(){ var d=$("devhint"); if(d) d.innerHTML=devHintHTML(); }
+function schedule(){ if(raf) cancelAnimationFrame(raf); raf=requestAnimationFrame(run); }
+
+/* ------------------------------------------------------------------- init */
+loadHash();
+document.getElementById("hdrstat").textContent=E.TOPOLOGIES.length+" topologies \u00b7 "+Object.keys(E.PARTS).length+" parts \u00b7 schemaVersion "+E.schemaVersion;
+renderForm(); renderAdv(); renderDevs(); renderLib();
+$("form").addEventListener("input",schedule);
+$("adv").addEventListener("input",schedule);
+run();
+})();
+/* ==== UI END ==== */
+</script>
+</body>
+</html>
